@@ -1,54 +1,37 @@
-use std::sync::Mutex;
+use tauri::{AppHandle, LogicalSize, Manager, Runtime};
 
-use tauri::{AppHandle, LogicalPosition, LogicalSize, Manager, State};
+const WIDGET: &str = "aether-widget";
 
-/// Stable anchor for the widget: the horizontal centre and top edge of the
-/// window, in logical pixels, captured once from the window's first position.
+/// The island's width never changes, only its height.
 ///
-/// Stored rather than re-read on every resize on purpose. `set_position` and
-/// `set_size` are queued onto the event loop, so querying the window's current
-/// geometry mid-animation returns stale values. Feeding those stale values back
-/// into a position calculation compounds the error on every frame and walks the
-/// window across the screen.
-#[derive(Default)]
-pub struct Anchor(Mutex<Option<(f64, f64)>>);
+/// This is not a limitation we settled for, it is forced by the compositor.
+/// Under Wayland the position of a window is chosen by the compositor and the
+/// client cannot move it afterwards — `gtk_window_move` is a no-op, which was
+/// confirmed by instrumenting a real run: the position stayed at (0,0) no
+/// matter what was requested. So the window grows from a fixed left edge. If the
+/// width changed between the collapsed and expanded states, the window would
+/// grow rightwards from that anchor and the island would visibly slide across
+/// the screen as the pointer crossed the hover boundary.
+///
+/// Holding the width fixed and centring the island inside means the window never
+/// moves horizontally, so the island stays anchored in one place. Only the
+/// height animates, which Wayland does allow.
+pub const ISLAND_WIDTH: f64 = 420.0;
 
+/// Height of the island when collapsed.
+pub const COLLAPSED_HEIGHT: f64 = 32.0;
+
+/// Resizes the native window to the island's height.
+///
+/// The width is pinned to [`ISLAND_WIDTH`] and the island centres itself inside
+/// it, so the widget keeps a stable horizontal position. The transparent margin
+/// either side of the collapsed island is handled by the island asking the
+/// compositor for click-through, not by shrinking the window.
 #[tauri::command]
-pub fn resize_window(
-    app: AppHandle,
-    anchor: State<'_, Anchor>,
-    width: f64,
-    height: f64,
-) {
-    let Some(window) = app.get_webview_window("aether-widget") else {
+pub fn fit_window<R: Runtime>(app: AppHandle<R>, height: f64) {
+    let Some(window) = app.get_webview_window(WIDGET) else {
         return;
     };
 
-    let (Ok(scale), Ok(position), Ok(size)) = (
-        window.scale_factor(),
-        window.outer_position(),
-        window.inner_size(),
-    ) else {
-        return;
-    };
-
-    let mut guard = anchor.0.lock().unwrap_or_else(|e| e.into_inner());
-
-    let (center_x, top_y) = match *guard {
-        Some(anchor) => anchor,
-        None => {
-            let cur_x = f64::from(position.x) / scale;
-            let cur_w = f64::from(size.width) / scale;
-            let anchor = (cur_x + cur_w / 2.0, f64::from(position.y) / scale);
-            *guard = Some(anchor);
-            anchor
-        }
-    };
-
-    drop(guard);
-
-    // Derive the position purely from the stored anchor and the requested size,
-    // so repeated calls with the same target are idempotent.
-    let _ = window.set_position(LogicalPosition::new(center_x - width / 2.0, top_y));
-    let _ = window.set_size(LogicalSize::new(width, height));
+    let _ = window.set_size(LogicalSize::new(ISLAND_WIDTH, height));
 }

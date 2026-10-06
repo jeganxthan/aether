@@ -13,3 +13,30 @@ body {
   overflow: hidden;
   background: transparent;
 }
+
+/*
+  Clock face. Coucou/NotchBuddy draws every label with SwiftUI's `.font(.system())`,
+  which is the platform UI font — SF Pro on macOS. It ships no webfont at all, so
+  matching it here means using the system UI stack rather than bundling a font.
+  Tabular figures keep every digit the same width, so the clock does not jitter
+  horizontally as the numbers change.
+*/
+.font-clock {
+  font-family:
+    system-ui,
+    -apple-system,
+    "Segoe UI",
+    Roboto,
+    "Helvetica Neue",
+    "Noto Sans",
+    sans-serif;
+  font-feature-settings: "tnum" 1;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.01em;
+  font-weight: 500;
+}
+
+@theme {
+    --font-sans: system-ui, sans-serif;
+    --font-clock: system-ui, sans-serif;
+}
