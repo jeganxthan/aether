@@ -1,0 +1,299 @@
+# ─────────────────────────────────────────
+# Aether Labwc Theme
+# Dark grey appearance matching:
+# launcher, popup, clipboard, OSD and notify
+# ─────────────────────────────────────────
+
+
+# ─────────────────────────────────────────
+# General
+# ─────────────────────────────────────────
+
+border.width: 1
+
+
+# ─────────────────────────────────────────
+# Window titlebar padding
+# ─────────────────────────────────────────
+
+window.titlebar.padding.width: 4
+window.titlebar.padding.height: 2
+
+
+# ─────────────────────────────────────────
+# Window borders
+# ─────────────────────────────────────────
+
+window.active.border.color: #FFFFFF24
+
+window.inactive.border.color: #FFFFFF12
+
+
+# ─────────────────────────────────────────
+# Toggle-keybind indicator
+# ─────────────────────────────────────────
+
+window.active.indicator.toggled-keybind.color: #6EA8FE
+
+
+# ─────────────────────────────────────────
+# Window titlebar
+# ─────────────────────────────────────────
+
+window.active.title.bg.color: #1A1A1C
+
+window.inactive.title.bg.color: #111113
+
+window.*.title.bg: Solid
+
+
+# ─────────────────────────────────────────
+# Window title text
+# ─────────────────────────────────────────
+
+window.active.label.text.color: #FFFFFF
+
+window.inactive.label.text.color: #FFFFFF80
+
+window.label.text.justify: center
+
+
+# ─────────────────────────────────────────
+# Window buttons
+# ─────────────────────────────────────────
+
+window.button.width: 28
+
+window.button.height: 28
+
+window.button.spacing: 2
+
+
+# ─────────────────────────────────────────
+# Window-button hover
+# ─────────────────────────────────────────
+
+window.button.hover.bg.color: #FFFFFF14
+
+window.button.hover.bg.corner-radius: 7
+
+
+# ─────────────────────────────────────────
+# Window-button icon colors
+# ─────────────────────────────────────────
+
+window.active.button.unpressed.image.color: #FFFFFF
+
+window.inactive.button.unpressed.image.color: #FFFFFF70
+
+
+# ─────────────────────────────────────────
+# Window shadows
+# ─────────────────────────────────────────
+
+window.active.shadow.size: 50
+
+window.inactive.shadow.size: 30
+
+window.active.shadow.color: #00000080
+
+window.inactive.shadow.color: #00000050
+
+
+# ─────────────────────────────────────────
+# Menu
+# ─────────────────────────────────────────
+
+menu.overlap.x: 0
+
+menu.overlap.y: 0
+
+menu.width.min: 120
+
+menu.width.max: 300
+
+
+# Menu border
+
+menu.border.width: 1
+
+menu.border.color: #FFFFFF20
+
+
+# Normal menu item
+
+menu.items.bg.color: #1A1A1C
+
+menu.items.text.color: #FFFFFF
+
+
+# Selected/hovered menu item
+
+menu.items.active.bg.color: #FFFFFF18
+
+menu.items.active.text.color: #FFFFFF
+
+
+# Menu spacing
+
+menu.items.padding.x: 12
+
+menu.items.padding.y: 8
+
+
+# Menu separators
+
+menu.separator.width: 1
+
+menu.separator.padding.width: 10
+
+menu.separator.padding.height: 5
+
+menu.separator.color: #FFFFFF18
+
+
+# Menu title
+
+menu.title.bg.color: #111113
+
+menu.title.text.color: #FFFFFF
+
+menu.title.text.justify: Center
+
+
+# ─────────────────────────────────────────
+# OSD / Alt + Tab background
+# ─────────────────────────────────────────
+
+osd.bg.color: #1A1A1CF7
+
+osd.border.color: #FFFFFF24
+
+osd.border.width: 1
+
+osd.label.text.color: #FFFFFF
+
+
+# ─────────────────────────────────────────
+# Classic Alt + Tab
+# ─────────────────────────────────────────
+
+# Width of the switcher.
+osd.window-switcher.style-classic.width: 560
+
+
+# Outer padding.
+
+osd.window-switcher.style-classic.padding: 10
+
+
+# Window-item spacing.
+
+osd.window-switcher.style-classic.item.padding.x: 14
+
+osd.window-switcher.style-classic.item.padding.y: 9
+
+
+# Selected window.
+
+osd.window-switcher.style-classic.item.active.border.width: 1
+
+osd.window-switcher.style-classic.item.active.border.color: #FFFFFF28
+
+osd.window-switcher.style-classic.item.active.bg.color: #FFFFFF18
+
+
+# Application icon size.
+
+osd.window-switcher.style-classic.item.icon.size: 28
+
+
+# ─────────────────────────────────────────
+# Thumbnail Alt + Tab
+# ─────────────────────────────────────────
+
+# Maximum width of the complete switcher.
+
+osd.window-switcher.style-thumbnail.width.max: 85%
+
+
+# Outer padding.
+
+osd.window-switcher.style-thumbnail.padding: 12
+
+
+# Individual window-card size.
+
+osd.window-switcher.style-thumbnail.item.width: 260
+
+osd.window-switcher.style-thumbnail.item.height: 190
+
+
+# Window-card inner padding.
+
+osd.window-switcher.style-thumbnail.item.padding: 10
+
+
+# Selected thumbnail.
+
+osd.window-switcher.style-thumbnail.item.active.border.width: 2
+
+osd.window-switcher.style-thumbnail.item.active.border.color: #FFFFFF38
+
+osd.window-switcher.style-thumbnail.item.active.bg.color: #FFFFFF14
+
+
+# Application icon.
+
+osd.window-switcher.style-thumbnail.item.icon.size: 42
+
+
+# ─────────────────────────────────────────
+# Window preview
+# ─────────────────────────────────────────
+
+osd.window-switcher.preview.border.width: 2
+
+osd.window-switcher.preview.border.color: #FFFFFF40
+
+
+# ─────────────────────────────────────────
+# Workspace switcher
+# ─────────────────────────────────────────
+
+osd.workspace-switcher.boxes.width: 24
+
+osd.workspace-switcher.boxes.height: 24
+
+osd.workspace-switcher.boxes.border.width: 2
+
+
+# ─────────────────────────────────────────
+# Window snapping overlay
+# ─────────────────────────────────────────
+
+snapping.overlay.region.bg.enabled: yes
+
+snapping.overlay.edge.bg.enabled: yes
+
+snapping.overlay.region.border.enabled: yes
+
+snapping.overlay.edge.border.enabled: yes
+
+
+# Transparent grey snapping area.
+
+snapping.overlay.region.bg.color: #FFFFFF18
+
+snapping.overlay.edge.bg.color: #FFFFFF18
+
+
+# Snapping borders.
+
+snapping.overlay.region.border.width: 1
+
+snapping.overlay.edge.border.width: 1
+
+snapping.overlay.region.border.color: #FFFFFF40
+
+snapping.overlay.edge.border.color: #FFFFFF40

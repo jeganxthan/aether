@@ -1,12 +1,13 @@
 # Screenshots
 
-Drop the demo images referenced by the README here:
+Images referenced by the top-level README. Keep files reasonably small (<5 MB)
+so the README loads quickly.
 
-- `collapsed.png` — the island at rest
-- `launcher.png` — the launcher open
-- (optional) `clipboard.png`, `wifi.png`, `music.png`, `notification.png`
-- (optional) a short `demo.gif` or `demo.mp4` — animated demos convert best
+| File | Shows |
+| --- | --- |
+| `unhovered.png` | The island at rest (collapsed strip). |
+| `launcher.gif` | Launcher hovered/open, plus the clipboard. |
+| `notification.png` | A notification toast in the island. |
 
-A 1–2 minute captioned GIF at the top of the README is the single biggest driver
-of stars and contributors. Keep files reasonably small (<5 MB) so the README
-loads quickly.
+To refresh them, capture the island (PNG for stills, a short GIF for the animated
+demo) and overwrite the files above. Animated demos convert best.

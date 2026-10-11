@@ -11,11 +11,21 @@ with **Mochi**, an animated companion, reacting along the way.
 [![Platform: Linux / Wayland](https://img.shields.io/badge/platform-Linux%20%7C%20Wayland-blue.svg)](#requirements)
 [![Built with Tauri](https://img.shields.io/badge/built%20with-Tauri%20v2-24C8DB.svg)](https://tauri.app/)
 
+<p align="center">
+  <img src="docs/screenshots/unhovered.png" alt="The Aether island at rest" width="322">
+</p>
+
 > Status: early / personal project. APIs and layout are still changing.
 
-<!-- Screenshots: drop images into docs/screenshots/ and uncomment the lines below. -->
-<!-- ![Aether island collapsed](docs/screenshots/collapsed.png) -->
-<!-- ![Aether launcher open](docs/screenshots/launcher.png) -->
+## Screenshots
+
+**Launcher & clipboard**
+
+![The launcher open with the clipboard history](docs/screenshots/launcher.gif)
+
+**Notifications**
+
+![A notification toast in the island](docs/screenshots/notification.png)
 
 ## Features
 
@@ -62,13 +72,15 @@ npm run tauri dev      # development (Vite + the Tauri window)
 npm run tauri build    # production bundle (.deb / AppImage)
 ```
 
-The compositor integration relies on labwc keybinds / signals — see
-[labwc setup](#labwc-setup).
+Compositor integration is required for the island to be positioned and toggled —
+see [labwc setup](#labwc-setup).
 
-## Keyboard shortcuts
+## labwc setup
 
-Aether is driven from labwc keybinds because hardware global shortcuts do not
-work reliably under Wayland compositors. Add these to `~/.config/labwc/rc.xml`:
+Aether is driven from labwc keybinds because hardware global shortcuts are not
+reliable under Wayland. Two things are required: the toggle keybinds and a
+`windowRule` that pins and positions the widget window. Add both to
+`~/.config/labwc/rc.xml`:
 
 ```xml
 <keybind key="W-space">
@@ -78,6 +90,18 @@ work reliably under Wayland compositors. Add these to `~/.config/labwc/rc.xml`:
   <action name="Execute" command="pkill -WINCH -x aether-tauri"/>
 </keybind>
 ```
+
+```xml
+<windowRule identifier="*aether*" serverDecoration="no" skipTaskbar="yes"
+            skipWindowSwitcher="yes" fixedPosition="yes">
+  <action name="ToggleAlwaysOnTop"/>
+  <action name="MoveTo" x="680" y="0"/>
+</windowRule>
+```
+
+Copy-paste-ready files — the config fragment above, a login `autostart` and the
+optional Aether theme — with step-by-step instructions live in
+[`contrib/labwc/`](contrib/labwc/).
 
 | Shortcut | Action |
 | --- | --- |
@@ -111,6 +135,7 @@ src-tauri/src/
   space.rs          wlr-layer-shell top strip / exclusive zone
   focus.rs          Focus restoration
 scripts/            Standalone tsx test scripts
+contrib/labwc/      Compositor config (rc.xml fragment, autostart, theme)
 ```
 
 ## Testing

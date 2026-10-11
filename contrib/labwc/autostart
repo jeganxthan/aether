@@ -1,0 +1,7 @@
+# ~/.config/labwc/autostart
+#
+# Launch Aether when the labwc session starts. Adjust the command so it points
+# at the binary: a Tauri release build lands at
+# src-tauri/target/release/aether-tauri, while an installed package usually
+# provides /usr/bin/aether-tauri (already on PATH).
+aether-tauri &
