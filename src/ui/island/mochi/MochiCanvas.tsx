@@ -1,27 +1,32 @@
 import { useEffect, useRef } from "react";
-import { MochiEngine } from "./mochiEngine";
+import { MochiEngine, type NoticeKind } from "./mochiEngine";
 import { PopSpring } from "./popSpring";
+import { Sound } from "./sound";
 
 /**
- * The canvas is always EXPANDED_W x EXPANDED_H. Only a uniform CSS scale
- * changes between states, so the backing store is allocated once and never
- * reallocated mid-animation.
+ * The character is drawn at the size it is actually shown. The canvas backing
+ * store is resized to the display box (x devicePixelRatio) every time the box
+ * changes, so Mochi is never rasterised big and then squashed down by a CSS
+ * transform — that 4x downscale is what made the resting character look
+ * pixel-broken.
  *
  * The box is wider than the body because Mochi's hands reach past its sides
  * while waving — sizing to the body alone would clip them.
  */
-const EXPANDED_W = 140;
-const EXPANDED_H = 104;
+const EXPANDED_W = 154;
+const EXPANDED_H = 114;
 
 /** Body height at scale 1, matched to the box above. */
-const EXPANDED_BODY = 80;
+const EXPANDED_BODY = 88;
 
 /** Scale of the whole character in the collapsed strip. */
-const RESTING_SCALE = 0.24;
+const RESTING_SCALE = 0.2;
 
-/** Matches the island's own transition so the two settle together. */
-const SIZE_EASING = "cubic-bezier(0.16,1,0.3,1)";
-const SIZE_DURATION = 500;
+/** Scale of the whole character while the music row is on screen. */
+const MUSIC_SCALE = 0.55;
+
+/** Scale of the whole character beside the launcher input. */
+const LAUNCHER_SCALE = 0.45;
 
 interface MochiCanvasProps {
     /** True while the island is expanded. Drives the pop-in / tuck-out. */
@@ -32,17 +37,30 @@ interface MochiCanvasProps {
     searching?: boolean;
     /** Puts Mochi into its green "listening" state while music plays. */
     listening?: boolean;
+    /** Renders Mochi smaller beside the music row. */
+    music?: boolean;
+    /** Renders Mochi smaller beside the launcher input. */
+    launcher?: boolean;
+    /** Persistent notification look while a popup is up. */
+    notice?: NoticeKind;
+    /** Overrides the scale computed from the other props (notification popup). */
+    scale?: number;
+    /** Plays the greeting wave on expand. Off for the notification popup. */
+    greet?: boolean;
 }
 
 /**
  * The Mochi character, drawn on a canvas and animated in/out by the island's
- * expand state. The engine advances on its own rAF loop; React only pushes the
- * `expanded` transition in and tears the loop down on unmount.
+ * expand state. The engine advances on its own rAF loop and resizes the canvas
+ * to whatever size the character is shown at, so it stays crisp at every scale.
  */
-export default function MochiCanvas({ expanded, emote, searching = false, listening = false }: MochiCanvasProps) {
+export default function MochiCanvas({ expanded, emote, searching = false, listening = false, music = false, launcher = false, notice = "normal", scale, greet = true }: MochiCanvasProps) {
     const canvasRef = useRef<HTMLCanvasElement>(null);
+    const boxRef = useRef<HTMLDivElement>(null);
     const engineRef = useRef<MochiEngine | null>(null);
     const greetedRef = useRef(false);
+    const greetRef = useRef(greet);
+    greetRef.current = greet;
     const emoteTriggeredRef = useRef(false);
     const expandedRef = useRef(expanded);
     const popSpringRef = useRef<PopSpring | null>(null);
@@ -53,6 +71,27 @@ export default function MochiCanvas({ expanded, emote, searching = false, listen
     if (popSpringRef.current === null) {
         popSpringRef.current = new PopSpring();
     }
+
+    const targetScale = scale ??
+        (expanded
+            ? launcher
+                ? LAUNCHER_SCALE
+                : music
+                    ? MUSIC_SCALE
+                    : 1
+            : RESTING_SCALE);
+    const targetScaleRef = useRef(targetScale);
+    targetScaleRef.current = targetScale;
+
+    /*
+     * The box is sized by the render loop as the character eases between
+     * scales. A stable inline style (same object every render) seeds the first
+     * paint; React never rewrites it, so it cannot fight the loop.
+     */
+    const initialBoxStyle = useRef({
+        width: EXPANDED_W * targetScale,
+        height: EXPANDED_H * targetScale,
+    }).current;
 
     // The pop-in spring is advanced by the render loop, so React only has to fire
     // the two transitions: kick it when the island opens, snap it shut when it
@@ -77,21 +116,36 @@ export default function MochiCanvas({ expanded, emote, searching = false, listen
     }, [searching, expanded]);
 
     useEffect(() => {
-        engineRef.current?.setListening(listening && expanded);
-    }, [listening, expanded]);
+        engineRef.current?.setListening(
+            listening,
+        );
+    }, [listening]);
+
+    useEffect(() => {
+        engineRef.current?.setNoticeState(notice);
+    }, [notice]);
+
+    useEffect(() => {
+        const engine = engineRef.current!;
+        Sound.preload();
+        engine.onSquash = () => Sound.play("click");
+        engine.onGulp = () => Sound.play("gulp");
+        return () => {
+            engine.onSquash = null;
+            engine.onGulp = null;
+        };
+    }, []);
 
     useEffect(() => {
         const canvas = canvasRef.current;
-        if (!canvas) return;
+        const box = boxRef.current;
+        if (!canvas || !box) return;
 
         const engine = engineRef.current!;
         const ctx = canvas.getContext("2d");
         if (!ctx) return;
 
-        const dpr = window.devicePixelRatio || 1;
-        canvas.width = Math.round(EXPANDED_W * dpr);
-        canvas.height = Math.round(EXPANDED_H * dpr);
-        ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+        const dpr = Math.min(2, window.devicePixelRatio || 1);
 
         const pointer = { x: 0, y: 0, seen: false };
         const onMove = (e: PointerEvent) => {
@@ -104,14 +158,14 @@ export default function MochiCanvas({ expanded, emote, searching = false, listen
         let raf = 0;
         let last = performance.now() / 1000;
 
-        // The look-at target is the canvas centre. It only moves when the island
-        // is resized or the window itself moves, so it is measured on demand
-        // instead of every frame — reading it per frame forces a synchronous
-        // layout on each step of the rAF loop.
+        // The look-at target is the character's centre. It only moves when the
+        // island is resized or the window itself moves, so it is measured on
+        // demand instead of every frame — reading it per frame forces a
+        // synchronous layout on each step of the rAF loop.
         let centerX = 0;
         let centerY = 0;
         const remeasure = () => {
-            const rect = canvas.getBoundingClientRect();
+            const rect = box.getBoundingClientRect();
             centerX = rect.left + rect.width / 2;
             centerY = rect.top + rect.height / 2;
         };
@@ -120,6 +174,9 @@ export default function MochiCanvas({ expanded, emote, searching = false, listen
 
         const spring = popSpringRef.current!;
         let fade = 1;
+        let k = targetScaleRef.current;
+        let lastW = 0;
+        let lastH = 0;
 
         const step = () => {
             const now = performance.now() / 1000;
@@ -133,13 +190,36 @@ export default function MochiCanvas({ expanded, emote, searching = false, listen
             const fadeK = 1 - Math.pow(0.0005, dt);
             fade += ((isExpanded ? 1 : 0.92) - fade) * fadeK;
 
-            engine.bodyHeight = EXPANDED_BODY;
+            // Ease the whole-character scale toward its target so the backing
+            // store can be resized to the exact size on screen. Rasterising at
+            // display size is what keeps the character crisp when small.
+            k += (targetScaleRef.current - k) * (1 - Math.pow(0.0009, dt));
+
+            const w = EXPANDED_W * k;
+            const h = EXPANDED_H * k;
+            const bw = Math.max(1, Math.round(w * dpr));
+            const bh = Math.max(1, Math.round(h * dpr));
+            if (bw !== lastW || bh !== lastH) {
+                lastW = bw;
+                lastH = bh;
+                canvas.width = bw;
+                canvas.height = bh;
+                canvas.style.width = `${w}px`;
+                canvas.style.height = `${h}px`;
+                box.style.width = `${w}px`;
+                box.style.height = `${h}px`;
+            }
+            ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+
+            engine.bodyHeight = EXPANDED_BODY * k;
             engine.scale = Math.max(0.05, pop);
             engine.opacity = fade;
 
             // Look-at follows the pointer, once it has actually moved inside the
-            // window. Before that the eyes sit centred.
-            if (isExpanded && pointer.seen) {
+            // window. This is deliberately not gated on `isExpanded`: the eyes
+            // keep tracking while the island is collapsed, and hold their last
+            // heading afterwards instead of snapping back to centre.
+            if (pointer.seen) {
                 engine.lookX = Math.tanh((pointer.x - centerX) / 120);
                 engine.lookY = -Math.tanh((pointer.y - centerY) / 90);
             }
@@ -148,9 +228,13 @@ export default function MochiCanvas({ expanded, emote, searching = false, listen
 
             // Greet once the body is mostly up, not on the first frame —
             // greeting while still scaling reads as a double-take.
-            if (isExpanded && !greetedRef.current && spring.readyToGreet) {
+            // In music mode the greeting is skipped: the character drops
+            // straight into the listening state set by setListening.
+            if (isExpanded && greetRef.current && !greetedRef.current && spring.readyToGreet) {
                 greetedRef.current = true;
-                if (emote && !emoteTriggeredRef.current) {
+                if (music) {
+                    /* no greeting — listening state only */
+                } else if (emote && !emoteTriggeredRef.current) {
                     emoteTriggeredRef.current = true;
                     engineRef.current?.setEmote(emote, 1.6);
                 } else {
@@ -158,10 +242,10 @@ export default function MochiCanvas({ expanded, emote, searching = false, listen
                 }
             }
 
-            ctx.clearRect(0, 0, EXPANDED_W, EXPANDED_H);
+            ctx.clearRect(0, 0, w, h);
             ctx.save();
             ctx.globalAlpha = engine.opacity;
-            engine.draw(ctx, EXPANDED_W, EXPANDED_H, now);
+            engine.draw(ctx, w, h, now);
             ctx.restore();
 
             raf = requestAnimationFrame(step);
@@ -176,31 +260,21 @@ export default function MochiCanvas({ expanded, emote, searching = false, listen
         };
     }, []);
 
-    const k = expanded ? 1 : RESTING_SCALE;
-
     return (
         <div
-            className="relative shrink-0 pointer-events-auto cursor-pointer transition-all"
+            ref={boxRef}
+            className="relative shrink-0 pointer-events-auto cursor-pointer"
             onClick={() => {
                 if (expandedRef.current) engineRef.current?.poke();
             }}
-            style={{
-                width: EXPANDED_W * k,
-                height: EXPANDED_H * k,
-                transitionDuration: `${SIZE_DURATION}ms`,
-                transitionTimingFunction: SIZE_EASING,
-            }}
+            style={initialBoxStyle}
         >
             <canvas
                 ref={canvasRef}
-                className="absolute left-1/2 top-1/2 pointer-events-none select-none"
-                style={{
-                    width: EXPANDED_W,
-                    height: EXPANDED_H,
-                    transform: `translate(-50%, -50%) scale(${k})`,
-                    transition: `transform ${SIZE_DURATION}ms ${SIZE_EASING}`,
-                }}
+                className="absolute left-0 top-0 block pointer-events-none select-none"
             />
         </div>
     );
 }
+
+

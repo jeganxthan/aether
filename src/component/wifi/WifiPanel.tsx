@@ -5,6 +5,7 @@ import {
 } from "react";
 
 import { invoke } from "@tauri-apps/api/core";
+import { CircleChevronRight } from "lucide-react";
 
 interface WifiStatus {
     enabled: boolean;
@@ -93,6 +94,9 @@ export default function WifiPanel({
             signal: null,
         });
 
+    const [wifiReady, setWifiReady] =
+        useState(false);
+
     const [networks, setNetworks] =
         useState<WifiNetwork[]>(
             [],
@@ -124,11 +128,16 @@ export default function WifiPanel({
                     );
 
                 setWifi(status);
+                setWifiReady(true);
+
+                return true;
             } catch (error) {
                 console.error(
                     "Failed to get Wi-Fi status:",
                     error,
                 );
+
+                return false;
             }
         };
 
@@ -275,7 +284,26 @@ export default function WifiPanel({
         };
 
     useEffect(() => {
-        loadWifi();
+        let cancelled = false;
+        let timer: number | undefined;
+
+        const attempt = async () => {
+            const loaded = await loadWifi();
+
+            if (!cancelled && !loaded) {
+                timer = window.setTimeout(
+                    attempt,
+                    1000,
+                );
+            }
+        };
+
+        attempt();
+
+        return () => {
+            cancelled = true;
+            window.clearTimeout(timer);
+        };
     }, []);
 
     useEffect(() => {
@@ -422,7 +450,10 @@ export default function WifiPanel({
                         role="switch"
                         aria-checked={wifi.enabled}
                         onClick={toggleWifi}
-                        disabled={toggling}
+                        disabled={
+                            toggling ||
+                            !wifiReady
+                        }
                         title={
                             wifi.enabled
                                 ? "Turn Wi-Fi off"
@@ -523,11 +554,7 @@ export default function WifiPanel({
                             stroke="currentColor"
                             strokeWidth="2"
                         >
-                            <path
-                                strokeLinecap="round"
-                                strokeLinejoin="round"
-                                d="M6 9l6 6 6-6"
-                            />
+                            <CircleChevronRight />
                         </svg>
                     </button>
                 </div>
@@ -558,14 +585,12 @@ export default function WifiPanel({
                     px-[10px]
                     py-[6px]
 
-                    scrollbar-thin
-                    scrollbar-track-transparent
-                    scrollbar-thumb-white/10
+                    no-scrollbar
                 "
             >
                 {/* WIFI OFF */}
 
-                {!wifi.enabled && (
+                {wifiReady && !wifi.enabled && (
                     <div
                         className="
                             flex
@@ -694,7 +719,7 @@ export default function WifiPanel({
                                                         <div
                                                             className="
                                     mt-[3px]
-                                    text-[11px]
+                                    text-[12px]
                                     leading-none
                                     text-neutral-500
                                 "

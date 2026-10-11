@@ -26,9 +26,16 @@ chrono = "0.4"
 tokio = { version = "1", features = ["time"] }
 zbus = "5"
 futures-util = "0.3"
+dirs = "7.0.0"
+signal-hook = "0.3"
+tauri-plugin-global-shortcut = "2.4.0"
+rusqlite = { version = "0.40.2", features = ["bundled"] }
 
 [target.'cfg(target_os = "linux")'.dependencies]
 gtk = "0.18"
+wayland-client = "0.31"
+wayland-protocols-wlr = { version = "0.3", features = ["client"] }
+libc = "0.2"
 
 # Read the optimization guideline for more details: https://tauri.app/concept/size/#cargo-configuration
 [profile.release]

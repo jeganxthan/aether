@@ -40,3 +40,99 @@ body {
     --font-sans: system-ui, sans-serif;
     --font-clock: system-ui, sans-serif;
 }
+/*
+  Hide the scrollbar while keeping wheel / keyboard scrolling. WebKitGTK
+  (the launcher's results list) needs the ::-webkit-scrollbar rule; the
+  other two cover the remaining engines.
+*/
+.no-scrollbar {
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+}
+
+.no-scrollbar::-webkit-scrollbar {
+    display: none;
+    width: 0;
+    height: 0;
+}
+
+/*
+  Mini now-playing indicator. Square box + 50% radius is what
+  actually makes it a circle; a fixed width/height pair of
+  different values only ever produced a clipped oval.
+  The bars are centred with flexbox instead of padding so the
+  content can never exceed the inner box.
+*/
+.mini-cava {
+    box-sizing: border-box;
+
+    width: 24px;
+    height: 24px;
+    aspect-ratio: 1 / 1;
+    flex-shrink: 0;
+
+    display: flex;
+    align-items: center;
+    justify-content: center;
+
+    gap: 2px;
+
+    border-radius: 50%;
+    border: 1px solid #262626;
+    background: #090909;
+
+    padding: 0;
+
+    overflow: hidden;
+}
+
+.mini-cava-bar {
+    width: 2px;
+    height: 8px;
+    flex-shrink: 0;
+
+    border-radius: 9999px;
+    background: #d4d4d4;
+
+    transform-origin: center;
+    animation-name: mini-cava-random;
+    animation-timing-function: ease-in-out;
+    animation-iteration-count: infinite;
+    animation-direction: alternate;
+
+    will-change: transform;
+}
+
+.bar-1,
+.bar-3 {
+    height: 5px;
+}
+
+.bar-2 {
+    height: 9px;
+}
+
+.bar-1 {
+    animation-duration: 700ms;
+    animation-delay: -140ms;
+}
+
+.bar-2 {
+    animation-duration: 560ms;
+    animation-delay: -320ms;
+}
+
+.bar-3 {
+    animation-duration: 700ms;
+    animation-delay: -500ms;
+}
+
+@keyframes mini-cava-random {
+    from {
+        transform: scaleY(0.45);
+    }
+
+    to {
+        transform: scaleY(1.1);
+    }
+}

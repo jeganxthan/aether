@@ -37,6 +37,9 @@ export type Badge =
     | { kind: "dot"; color: RGB }
     | { kind: "note"; color: RGB };
 
+/** Notification level mapped onto a persistent Mochi look. */
+export type NoticeKind = "normal" | "warning" | "critical";
+
 export type RGB = readonly [number, number, number];
 
 type ParticleType = "heart" | "star" | "spark" | "sweat" | "z" | "note";
@@ -121,6 +124,11 @@ const IDLE_COLOR: RGB = [0.902, 0.914, 0.933];
 const SEARCHING_COLOR: RGB = [0.388, 0.396, 0.949];
 const DIZZY_COLOR: RGB = [0.957, 0.447, 0.714];
 const NOTE_COLOR: RGB = [0.639, 0.902, 0.208];
+
+/** #F4505E — error state, used for critical notifications. */
+const ERROR_COLOR: RGB = [0.957, 0.314, 0.369];
+/** #FB9143 — ratelimit / warning state, used for warning notifications. */
+const WARNING_COLOR: RGB = [0.984, 0.569, 0.263];
 
 // MARK: - Engine
 
@@ -294,23 +302,37 @@ export class MochiEngine {
     }
 
     poke() {
-        // Roughly one tap in three swallows instead of squashing.
-        if (Math.random() < 0.3) {
+        const now = performance.now() / 1000;
+        if (now < this.dizzyUntil) return;
+
+        this.slapTimes = this.slapTimes.filter((t) => now - t < 1.7);
+        this.slapTimes.push(now);
+
+        let overwhelmed = false;
+        if (this.listening) {
+            this.slapTimes = [];
+        } else if (this.slapTimes.length >= 3) {
+            this.slapTimes = [];
+            overwhelmed = true;
+        }
+
+        if (!overwhelmed && Math.random() < 0.3) {
             this.gulp();
+            this.onGulp?.();
             return;
         }
 
         this.squash();
+        this.onSquash?.();
 
-        // Dizzy escalation disabled for now.
-        // const now = performance.now() / 1000;
-        // if (now < this.dizzyUntil) return;
-        // this.slapTimes = this.slapTimes.filter((t) => now - t < 1.7);
-        // this.slapTimes.push(now);
-        // if (this.slapTimes.length >= 3) {
-        //     this.slapTimes = [];
-        //     this.slap();
-        // }
+        if (overwhelmed) {
+            this.dizzy();
+            this.onDizzy?.();
+            return;
+        }
+
+        this.eyeOverride = "line";
+        this.eyeOverrideUntil = now + 0.8;
     }
 
     slap() {
@@ -328,13 +350,6 @@ export class MochiEngine {
         this.dizzyUntil = now + 3.0;
         this.setTintColor(DIZZY_COLOR, 0.7);
         this.roll = 0;
-        this.anim(
-            "roll",
-            [{ target: Math.PI * 2 * 2, duration: 1300, ease: inOut }],
-            () => {
-                this.roll = 0;
-            },
-        );
         this.animAt(3.0, () => this.setTintColor(IDLE_COLOR, 0));
     }
 
@@ -417,6 +432,36 @@ export class MochiEngine {
     setTintColor(color: RGB, amount: number) {
         this.tintTarget = amount;
         this.tintColor = color;
+    }
+
+    /**
+     * Put Mochi into (or out of) a notification look for the whole time a
+     * popup is up. `warning` uses the tired ratelimit look and `critical`
+     * the flat-eyed error look, matching the original prototype's colours
+     * for those severities.
+     */
+    setNoticeState(kind: NoticeKind) {
+        if (this.notice === kind) return;
+        this.notice = kind;
+        switch (kind) {
+            case "critical":
+                this.setTintColor(ERROR_COLOR, 0.85);
+                this.setBadge({ kind: "dot", color: ERROR_COLOR });
+                break;
+            case "warning":
+                this.setTintColor(WARNING_COLOR, 0.8);
+                this.setBadge({ kind: "dot", color: WARNING_COLOR });
+                break;
+            case "normal":
+            default:
+                this.setTintColor(IDLE_COLOR, 0);
+                this.setBadge(null);
+                break;
+        }
+    }
+
+    clearNoticeState() {
+        this.setNoticeState("normal");
     }
 
     setSearching(searching: boolean) {
@@ -655,8 +700,20 @@ export class MochiEngine {
      */
     bodyHeight = 96;
 
+    /** Fired whenever a tap lands as a squash rather than a swallow. */
+    onSquash: (() => void) | null = null;
+    /** Fired when a tap makes Mochi swallow. */
+    onGulp: (() => void) | null = null;
+    /** Fired when Mochi has been tapped too many times at once. */
+    onDizzy: (() => void) | null = null;
+
     private eyeOverride: EyeShape | null = null;
     private eyeOverrideUntil = 0;
+    /**
+     * Persistent notice look, driven by a notification's level. Unlike
+     * `eyeOverride` it never expires on its own — clear it explicitly.
+     */
+    private notice: NoticeKind = "normal";
     private pending: { at: number; fn: () => void }[] = [];
     private badgeToken = 0;
     private tintTarget = 0;
@@ -665,7 +722,7 @@ export class MochiEngine {
     private searching = false;
     private listening = false;
     private lastNote = 0;
-    // private slapTimes: number[] = [];
+    private slapTimes: number[] = [];
     private dizzyUntil = 0;
 
     private animAt(delaySeconds: number, fn: () => void, dedupe = true) {
@@ -870,7 +927,9 @@ export class MochiEngine {
     ) {
         const shape = this.listening
             ? "closed"
-            : this.eyeOverride ?? "pill";
+            : (this.notice !== "normal"
+                ? (this.notice === "critical" ? "flat" : "tired")
+                : this.eyeOverride ?? "pill");
 
         ctx.save();
         ctx.clip(path);
@@ -1154,7 +1213,12 @@ function drawEyeShape(
 
         case "happy":
             ctx.beginPath();
-            ctx.arc(0, h * 0.18, w * 0.82, deg(180 + 12), deg(180 - 12));
+            // Coucou draws arc(..., Math.PI*1.12, Math.PI*1.88): 201.6°→338.4°,
+            // sweeping 136.8° through the top of the circle. deg(180+12) /
+            // deg(180-12) gives 192°→168°, and because end < start canvas adds
+            // a full turn and sweeps 336° — a near-complete circle instead of
+            // the upward ^^ arc.
+            ctx.arc(0, h * 0.18, w * 0.82, deg(201.6), deg(338.4));
             ctx.strokeStyle = ink;
             ctx.lineWidth = w * 0.5;
             ctx.lineCap = "round";

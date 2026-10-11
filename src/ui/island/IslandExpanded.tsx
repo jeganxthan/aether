@@ -1,9 +1,34 @@
 import { useEffect, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
+import { Bell } from "lucide-react";
 
-import WifiCard from "../../component/WifiCard";
-import MusicStats from "../../component/MusicStats";
+import WifiCard from "../../component/wifi/WifiCard";
+import MusicStats from "../../component/music/MusicStats";
+
+const WIFI_POLL_MS = 5000;
+
+const BATTERY_POLL_MS = 5000;
+
+const BATTERY_LEVELS = [
+    0, 5, 10, 20, 35, 50, 65, 80, 90, 100,
+];
+
+function batteryIcon(
+    percentage: number,
+    charging: boolean,
+) {
+    const level = BATTERY_LEVELS.reduce(
+        (best, candidate) =>
+            candidate <= percentage &&
+                candidate > best
+                ? candidate
+                : best,
+        0,
+    );
+
+    return `/icons/battery/aether-applet-battery-level-${level}${charging ? "-charging" : ""}-symbolic.svg`;
+}
 
 interface WifiStatus {
     enabled: boolean;
@@ -12,8 +37,16 @@ interface WifiStatus {
     signal: number | null;
 }
 
+interface NotificationSummary {
+    id: number;
+    isRead: boolean;
+}
+
 interface IslandExpandedProps {
     onWifiOpen: () => void;
+
+    /** Opens the notification history panel inside the island. */
+    onNotificationsOpen?: () => void;
 
     /*
      * Tells Island when the music player is on screen so it can size the
@@ -27,10 +60,10 @@ interface IslandExpandedProps {
 interface BatteryStatus {
     percentage: number;
     state:
-        | "charging"
-        | "discharging"
-        | "full"
-        | "unknown";
+    | "charging"
+    | "discharging"
+    | "full"
+    | "unknown";
     charging: boolean;
     plugged_in: boolean;
 }
@@ -57,12 +90,13 @@ interface MediaInfo {
 
 export default function IslandExpanded({
     onWifiOpen,
+    onNotificationsOpen,
     onMusicVisibleChange,
 }: IslandExpandedProps) {
 
     const [wifi, setWifi] =
         useState<WifiStatus>({
-            enabled: false,
+            enabled: true,
             connected: false,
             ssid: null,
             signal: null,
@@ -76,6 +110,9 @@ export default function IslandExpanded({
             charging: false,
             plugged_in: false,
         });
+
+    const [batteryReady, setBatteryReady] =
+        useState(false);
 
 
     /*
@@ -97,6 +134,9 @@ export default function IslandExpanded({
      * Load Wi-Fi.
      */
     useEffect(() => {
+        let cancelled = false;
+        let timer: number | undefined;
+
         const loadWifi = async () => {
             try {
                 const status =
@@ -104,10 +144,9 @@ export default function IslandExpanded({
                         "wifi_status",
                     );
 
-                console.log(
-                    "Aether WiFi status:",
-                    status,
-                );
+                if (cancelled) {
+                    return;
+                }
 
                 setWifi(status);
             } catch (error) {
@@ -115,10 +154,22 @@ export default function IslandExpanded({
                     "Failed to get WiFi status:",
                     error,
                 );
+            } finally {
+                if (!cancelled) {
+                    timer = window.setTimeout(
+                        loadWifi,
+                        WIFI_POLL_MS,
+                    );
+                }
             }
         };
 
         loadWifi();
+
+        return () => {
+            cancelled = true;
+            window.clearTimeout(timer);
+        };
     }, []);
 
 
@@ -126,6 +177,9 @@ export default function IslandExpanded({
      * Load battery.
      */
     useEffect(() => {
+        let cancelled = false;
+        let timer: number | undefined;
+
         const loadBattery = async () => {
             try {
                 const result =
@@ -133,16 +187,33 @@ export default function IslandExpanded({
                         "battery_status",
                     );
 
+                if (cancelled) {
+                    return;
+                }
+
                 setBattery(result);
+                setBatteryReady(true);
             } catch (error) {
                 console.error(
                     "Failed to get battery status:",
                     error,
                 );
+            } finally {
+                if (!cancelled) {
+                    timer = window.setTimeout(
+                        loadBattery,
+                        BATTERY_POLL_MS,
+                    );
+                }
             }
         };
 
         loadBattery();
+
+        return () => {
+            cancelled = true;
+            window.clearTimeout(timer);
+        };
     }, []);
 
 
@@ -192,6 +263,93 @@ export default function IslandExpanded({
 
 
     /*
+     * Unread notifications, shown as a badge on the bell card. The panel
+     * unmounts this component while it is open, so closing the panel
+     * remounts and reloads the true unread count.
+     */
+    const [unreadCount, setUnreadCount] =
+        useState(0);
+
+    useEffect(() => {
+        let cancelled = false;
+        let unlistenNew: (() => void) | undefined;
+        let unlistenClosed: (() => void) | undefined;
+        let unlistenClear: (() => void) | undefined;
+        let disposed = false;
+
+        const load = async () => {
+            try {
+                const history =
+                    await invoke<NotificationSummary[]>(
+                        "notification_history",
+                        { limit: 100 },
+                    );
+
+                if (!cancelled) {
+                    setUnreadCount(
+                        history.filter(
+                            (item) => !item.isRead,
+                        ).length,
+                    );
+                }
+            } catch (error) {
+                console.error(
+                    "Failed to load notifications:",
+                    error,
+                );
+            }
+        };
+
+        load();
+
+        const setup = async () => {
+            const stopNew = await listen(
+                "notification:new",
+                () => {
+                    setUnreadCount((count) =>
+                        count + 1,
+                    );
+                },
+            );
+
+            const stopClosed = await listen(
+                "notification:closed",
+                () => {
+                    setUnreadCount((count) =>
+                        Math.max(0, count - 1),
+                    );
+                },
+            );
+
+            const stopClear = await listen(
+                "notification:clear",
+                () => setUnreadCount(0),
+            );
+
+            if (disposed) {
+                stopNew();
+                stopClosed();
+                stopClear();
+            } else {
+                unlistenNew = stopNew;
+                unlistenClosed = stopClosed;
+                unlistenClear = stopClear;
+            }
+        };
+
+        setup();
+
+        return () => {
+            cancelled = true;
+            disposed = true;
+            unlistenNew?.();
+            unlistenClosed?.();
+            unlistenClear?.();
+        };
+    }, []);
+
+
+    /*
      * Automatically return to music after
      * the temporary default view expires.
      *
@@ -224,15 +382,20 @@ export default function IslandExpanded({
     };
 
 
+    /*
+     * Paused counts too: the row (and its play/pause button)
+     * must survive a pause so playback can be resumed from the
+     * widget instead of the row unmounting and vanishing.
+     */
     const musicPlaying =
-        media?.playback_status ===
-        "Playing";
+        media?.playback_status === "Playing" ||
+        media?.playback_status === "Paused";
 
 
     /*
      * Music is shown only while:
      *
-     * 1. MPRIS reports Playing
+     * 1. MPRIS reports Playing or Paused
      * 2. User hasn't temporarily dismissed it
      */
     const showMusic =
@@ -274,8 +437,15 @@ export default function IslandExpanded({
                     }
                 />
             ) : (
-                <div className="px-5 pb-5">
-
+                <div
+                    className="
+                        flex
+                        h-[120px]
+                        flex-col
+                        justify-end
+                        pb-5
+                    "
+                >
                     <div
                         className="
                             border-t
@@ -283,17 +453,11 @@ export default function IslandExpanded({
                             pt-2
                         "
                     >
-
-                        <div
-                            className="
-                                grid
-                                grid-cols-3
-                                gap-2
-                            "
-                        >
-
-                            {/* Wi-Fi */}
+                        <div className="flex gap-2">
                             <WifiCard
+                                enabled={
+                                    wifi.enabled
+                                }
                                 connected={
                                     wifi.connected
                                 }
@@ -308,72 +472,182 @@ export default function IslandExpanded({
                                 }
                             />
 
-
-                            {/* Battery */}
                             <div
                                 className="
+                                    min-w-0
+                                    flex-1
                                     rounded-xl
                                     border
                                     border-neutral-900
                                     bg-neutral-950
-                                    p-3
+                                    px-3
+                                    py-3
                                 "
                             >
-                                <p
+                                <div
                                     className="
-                                        text-[9px]
-                                        tracking-[0.18em]
-                                        text-neutral-600
+                                        flex
+                                        items-center
+                                        gap-2
                                     "
                                 >
-                                    BATTERY
-                                </p>
+                                    <img
+                                        src="/icons/bluetooth/aether-applet-bluetooth-active-symbolic.svg"
+                                        alt=""
+                                        className="
+                                            h-4
+                                            w-4
+                                            shrink-0
+                                            opacity-70
+                                        "
+                                    />
+
+                                    <p
+                                        className="
+                                            truncate
+                                            text-xs
+                                            text-neutral-300
+                                        "
+                                    >
+                                        Connected
+                                    </p>
+                                </div>
 
                                 <p
                                     className="
                                         mt-2
-                                        text-xs
-                                        text-neutral-300
+                                        truncate
+                                        text-[10px]
+                                        tracking-[0.18em]
+                                        text-neutral-600
                                     "
                                 >
-                                    {
-                                        battery.percentage
-                                    }%
+                                    GALAXY BUDS2
                                 </p>
                             </div>
 
-
-                            {/* Audio */}
                             <div
-                                className="
+                                className={`
+                                    flex
+                                    flex-col
+                                    shrink-0
                                     rounded-xl
                                     border
                                     border-neutral-900
                                     bg-neutral-950
-                                    p-3
-                                "
+                                    px-3
+                                    py-3
+                                    ${battery.charging
+                                        ? "w-[88px] justify-start"
+                                        : "w-[78px] justify-center"
+                                    }
+                                `}
                             >
-                                <p
-                                    className="
-                                        text-[9px]
-                                        tracking-[0.18em]
-                                        text-neutral-600
-                                    "
-                                >
-                                    AUDIO
-                                </p>
+                                {batteryReady && (
+                                    <>
+                                        <div
+                                            className="
+                                                flex
+                                                items-center
+                                                gap-2
+                                            "
+                                        >
+                                            <img
+                                                src={batteryIcon(
+                                                    battery.percentage,
+                                                    battery.charging,
+                                                )}
+                                                alt=""
+                                                className="
+                                                    h-4
+                                                    w-4
+                                                    shrink-0
+                                                "
+                                            />
 
-                                <p
-                                    className="
-                                        mt-2
-                                        text-xs
-                                        text-neutral-300
-                                    "
-                                >
-                                    42%
-                                </p>
+                                            <p
+                                                className="
+                                                    text-xs
+                                                    text-neutral-300
+                                                "
+                                            >
+                                                {
+                                                    battery.percentage
+                                                }
+                                                %
+                                            </p>
+                                        </div>
+
+                                        {battery.charging && (
+                                            <p
+                                                className="
+                                                    mt-2
+                                                    text-[10px]
+                                                    tracking-[0.18em]
+                                                    text-[#30D158]
+                                                "
+                                            >
+                                                CHARGING
+                                            </p>
+                                        )}
+                                    </>
+                                )}
                             </div>
 
+                            <button
+                                type="button"
+                                onClick={onNotificationsOpen}
+                                title="Notifications"
+                                className="
+                                    relative
+                                    flex
+                                    w-11
+                                    shrink-0
+                                    items-center
+                                    justify-center
+                                    rounded-xl
+                                    border
+                                    border-neutral-900
+                                    bg-neutral-950
+                                    transition-colors
+                                    duration-200
+                                    hover:border-neutral-800
+                                    hover:bg-neutral-900
+                                "
+                            >
+                                <Bell
+                                    size={16}
+                                    className="
+                                        text-neutral-400
+                                    "
+                                />
+
+                                {unreadCount > 0 && (
+                                    <span
+                                        className="
+                                            absolute
+                                            right-1.5
+                                            top-1.5
+                                            flex
+                                            h-[14px]
+                                            min-w-[14px]
+                                            items-center
+                                            justify-center
+                                            rounded-full
+                                            bg-[#0A84FF]
+                                            px-[3px]
+                                            text-[9px]
+                                            font-semibold
+                                            leading-none
+                                            text-white
+                                        "
+                                    >
+                                        {unreadCount > 9
+                                            ? "9+"
+                                            : unreadCount}
+                                    </span>
+                                )}
+                            </button>
                         </div>
                     </div>
                 </div>

@@ -24,7 +24,7 @@ included in this repository.
 
 If this permission is withdrawn, `src/ui/island/mochi/` must be replaced with a
 character of your own; nothing else in the app depends on its internals beyond
-the `MochiCanvas` component's `expanded` prop.
+the `MochiCanvas` component's `expanded`, `notice` and `scale` props.
 
 ### What was changed in the port
 
@@ -39,3 +39,7 @@ the `MochiCanvas` component's `expanded` prop.
   reintroduced if that surface appears.
 - The greeting timeline, hands, waves, emotes, particles, blinking, look-at and
   every eye shape are ported unchanged.
+- A persistent notification look was added on top of the ported state machine:
+  `MochiEngine.setNoticeState` (`normal`/`warning`/`critical`) reuses the
+  original error (#F4505E) and ratelimit (#FB9143) colours, a flat / tired eye
+  shape and a dot badge, driven by the island's notification popup.

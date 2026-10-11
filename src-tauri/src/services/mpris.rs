@@ -56,6 +56,35 @@ impl MediaService {
                 eprintln!("[Aether Media] listener stopped: {err}");
             }
         });
+
+        /*
+         * Second-by-second position ticker.
+         *
+         * Spotify does not emit Position PropertiesChanged,
+         * only PlaybackStatus/Metadata/Rate, and WebKit throttles
+         * rAF/timers in this composited always-on-top window, so
+         * neither event-driven Rust nor frontend timers can keep
+         * the progress bar running. While the active player is
+         * playing, refresh it once a second and push the fresh
+         * position to the frontend.
+         */
+        let ticker = self.clone();
+
+        tauri::async_runtime::spawn(async move {
+            let mut interval = tokio::time::interval(
+                std::time::Duration::from_secs(1),
+            );
+
+            interval.set_missed_tick_behavior(
+                tokio::time::MissedTickBehavior::Skip,
+            );
+
+            loop {
+                interval.tick().await;
+
+                ticker.refresh_active().await;
+            }
+        });
     }
 
 
@@ -350,7 +379,6 @@ impl MediaService {
         let player_name =
             format!("{MPRIS_PREFIX}{}", media.player);
 
-
         {
             let mut players = self.players.write().await;
 
@@ -382,21 +410,69 @@ impl MediaService {
          * The React side can decide not to display the full
          * player when playback_status != Playing.
          */
-        let should_use_paused = {
+        let (adopt, emit) = {
             let active =
                 self.active_player.read().await;
 
-            active.is_none()
+            match active.as_deref() {
+                None => (true, true),
+                Some(current) => (false, current == player_name),
+            }
         };
 
-
-        if should_use_paused {
+        if adopt {
             let mut active =
                 self.active_player.write().await;
 
             *active = Some(player_name);
+        }
 
+        if emit {
             self.emit_media(Some(media));
+        }
+    }
+
+
+    /*
+     * Ticker callback: read the active player's current state
+     * every second while it is playing and re-emit it, keeping
+     * the progress bar live without relying on frontend timers.
+     */
+    async fn refresh_active(&self) {
+        let active = {
+            let active =
+                self.active_player.read().await;
+
+            active.clone()
+        };
+
+        let Some(player) = active else {
+            return;
+        };
+
+        let playing = {
+            let players = self.players.read().await;
+
+            players
+                .get(&player)
+                .map(|media| media.is_playing())
+                .unwrap_or(false)
+        };
+
+        if !playing {
+            return;
+        }
+
+        match self.read_player(&player).await {
+            Ok(media) => {
+                self.update_player(media).await;
+            }
+
+            Err(err) => {
+                eprintln!(
+                    "[Aether Media] ticker refresh failed: {err}"
+                );
+            }
         }
     }
 
@@ -543,7 +619,27 @@ fn artists_value(
 fn int_value(
     value: Option<&OwnedValue>,
 ) -> Option<i64> {
-    value.and_then(|value| {
-        i64::try_from(value.clone()).ok()
-    })
+    let value = value?;
+
+    u64::try_from(value)
+        .ok()
+        .and_then(|n| i64::try_from(n).ok())
+        .or_else(|| i64::try_from(value).ok())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::int_value;
+    use zbus::zvariant::OwnedValue;
+
+    #[test]
+    fn int_value_reads_unsigned_metadata() {
+        let unsigned = OwnedValue::from(246_271_000u64);
+        assert_eq!(int_value(Some(&unsigned)), Some(246_271_000));
+
+        let signed = OwnedValue::from(1_234i64);
+        assert_eq!(int_value(Some(&signed)), Some(1_234));
+
+        assert_eq!(int_value(None), None);
+    }
 }

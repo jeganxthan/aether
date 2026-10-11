@@ -14,8 +14,8 @@
       {
         "label": "aether-widget",
         "title": "Aether",
-        "width": 420,
-        "height": 32,
+        "width": 560,
+        "height": 420,
         "fullscreen": false,
         "decorations": false,
         "transparent": true,
