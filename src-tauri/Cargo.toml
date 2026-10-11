@@ -1,8 +1,11 @@
 [package]
 name = "aether-tauri"
 version = "0.1.0"
-description = "A Tauri App"
-authors = ["you"]
+description = "A lightweight island shell for labwc on Wayland."
+authors = ["Jegan <jegan4044@gmail.com>"]
+license = "MIT"
+repository = "https://github.com/jeganxthan/aether"
+homepage = "https://github.com/jeganxthan/aether"
 edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html

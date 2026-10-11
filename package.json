@@ -1,12 +1,24 @@
 {
-  "name": "aether-tauri",
+  "name": "aether",
   "private": true,
   "version": "0.1.0",
+  "description": "A lightweight island shell for labwc on Wayland, built with Tauri, React and TypeScript.",
+  "license": "MIT",
+  "author": "Jegan <jegan4044@gmail.com>",
   "type": "module",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/jeganxthan/aether.git"
+  },
+  "bugs": {
+    "url": "https://github.com/jeganxthan/aether/issues"
+  },
+  "homepage": "https://github.com/jeganxthan/aether#readme",
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build",
     "preview": "vite preview",
+    "test": "tsx scripts/popSpring.test.ts",
     "tauri": "tauri"
   },
   "dependencies": {
@@ -24,6 +36,7 @@
     "@types/react": "^19.1.8",
     "@types/react-dom": "^19.1.6",
     "@vitejs/plugin-react": "^6.0.2",
+    "tsx": "^4.20.3",
     "typescript": "~6.0.3",
     "vite": "^8.0.16"
   }
