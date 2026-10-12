@@ -90,6 +90,21 @@ reliable under Wayland. Two things are required: the toggle keybinds and a
 <keybind key="W-c">
   <action name="Execute" command="pkill -WINCH -x aether-tauri"/>
 </keybind>
+<keybind key="XF86AudioRaiseVolume">
+  <action name="Execute" command="pkill -RTMIN+0 -x aether-tauri"/>
+</keybind>
+<keybind key="XF86AudioLowerVolume">
+  <action name="Execute" command="pkill -RTMIN+1 -x aether-tauri"/>
+</keybind>
+<keybind key="XF86AudioMute">
+  <action name="Execute" command="pkill -RTMIN+2 -x aether-tauri"/>
+</keybind>
+<keybind key="XF86MonBrightnessUp">
+  <action name="Execute" command="pkill -RTMIN+3 -x aether-tauri"/>
+</keybind>
+<keybind key="XF86MonBrightnessDown">
+  <action name="Execute" command="pkill -RTMIN+4 -x aether-tauri"/>
+</keybind>
 ```
 
 ```xml
@@ -108,6 +123,10 @@ optional Aether theme — with step-by-step instructions live in
 | --- | --- |
 | `Super` + `Space` | Toggle the app launcher |
 | `Super` + `C` | Toggle the clipboard history |
+| `Volume` key | Volume OSD (raise) |
+| `Volume −` key | Volume OSD (lower) |
+| `Mute` key | Volume OSD (mute toggle) |
+| `Brightness +` / `−` | Brightness OSD |
 | `Escape` / click away | Collapse the island |
 
 > `SIGUSR1` is reserved by WebKitGTK — do not send it to the process.

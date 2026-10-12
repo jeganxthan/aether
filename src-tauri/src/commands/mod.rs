@@ -5,3 +5,4 @@ pub mod launcher;
 pub mod clipboard;
 pub mod window;
 pub mod notifications;
+pub mod system_controls;

@@ -136,3 +136,12 @@ body {
         transform: scaleY(1.1);
     }
 }
+@keyframes aether-sun-rotate {
+  0% {
+    transform: rotate(0deg);
+  }
+
+  100% {
+    transform: rotate(45deg);
+  }
+}

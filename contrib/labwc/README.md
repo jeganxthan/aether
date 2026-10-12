@@ -24,8 +24,12 @@ labwc -r        # reload
 
 - `Super` + `Space` — toggle the launcher (`SIGUSR2`)
 - `Super` + `C` — toggle the clipboard (`SIGWINCH`)
+- Volume keys — show the volume OSD (`SIGRTMIN+0` / `+1` / `+2`)
+- Brightness keys — show the brightness OSD (`SIGRTMIN+3` / `+4`)
 
 > `SIGUSR1` is reserved by WebKitGTK — never send it to the process.
+> `SIGRTMIN+N` is the realtime signal `34+N`; the media-key OSD is passive and
+> never takes keyboard focus.
 
 The `<windowRules>` entry drops server-side decorations, keeps the widget out of
 the taskbar / window switcher, pins it on top and moves it to the top centre.

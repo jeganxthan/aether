@@ -11,9 +11,13 @@
 
   Aether is driven by Unix signals because hardware global shortcuts do not
   work reliably under Wayland compositors:
-    SIGUSR2   toggle the app launcher
-    SIGWINCH  toggle the clipboard history
+    SIGUSR2       toggle the app launcher
+    SIGWINCH      toggle the clipboard history
+    SIGRTMIN+0    volume up        SIGRTMIN+1  volume down
+    SIGRTMIN+2    toggle mute      SIGRTMIN+3  brightness up
+    SIGRTMIN+4    brightness down
   SIGUSR1 is reserved by WebKitGTK — never send it to the process.
+  The media keys show the island OSD only; they never take keyboard focus.
 -->
 
 <keyboard>
@@ -25,6 +29,27 @@
   <!-- Super + C -> toggle the clipboard history -->
   <keybind key="W-c">
     <action name="Execute" command="pkill -WINCH -x aether-tauri"/>
+  </keybind>
+
+  <!-- Volume / brightness keys -> island OSD -->
+  <keybind key="XF86AudioRaiseVolume">
+    <action name="Execute" command="pkill -RTMIN+0 -x aether-tauri"/>
+  </keybind>
+
+  <keybind key="XF86AudioLowerVolume">
+    <action name="Execute" command="pkill -RTMIN+1 -x aether-tauri"/>
+  </keybind>
+
+  <keybind key="XF86AudioMute">
+    <action name="Execute" command="pkill -RTMIN+2 -x aether-tauri"/>
+  </keybind>
+
+  <keybind key="XF86MonBrightnessUp">
+    <action name="Execute" command="pkill -RTMIN+3 -x aether-tauri"/>
+  </keybind>
+
+  <keybind key="XF86MonBrightnessDown">
+    <action name="Execute" command="pkill -RTMIN+4 -x aether-tauri"/>
   </keybind>
 </keyboard>
 

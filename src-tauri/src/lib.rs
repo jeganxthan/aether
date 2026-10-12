@@ -92,6 +92,13 @@ pub fn run() {
             commands::window::debug_log,
             commands::window::set_desktop_margin,
             focus_last_window,
+            commands::system_controls::volume_get,
+            commands::system_controls::volume_increase,
+            commands::system_controls::volume_decrease,
+            commands::system_controls::volume_toggle_mute,
+            commands::system_controls::brightness_get,
+            commands::system_controls::brightness_increase,
+            commands::system_controls::brightness_decrease,
         ])
         .setup(|app| {
             if let Err(error) = app
@@ -106,14 +113,20 @@ pub fn run() {
 
             // Track which toplevel held focus so the launcher / clipboard can
             // hand it back when they close (see `focus.rs`).
-            if focus::FocusTracker::start().map(|t| app.manage(t)).is_none() {
+            if focus::FocusTracker::start()
+                .map(|t| app.manage(t))
+                .is_none()
+            {
                 eprintln!("[Aether] Focus tracker unavailable; focus restore disabled");
             }
 
             // Reserve the top strip with a transparent layer-shell surface so
             // maximized / tiled windows stay below the island. The exclusive
             // zone is static — it is never toggled (see `space.rs`).
-            if space::SpaceReserver::start().map(|s| app.manage(s)).is_none() {
+            if space::SpaceReserver::start()
+                .map(|s| app.manage(s))
+                .is_none()
+            {
                 eprintln!("[Aether] Layer-shell unavailable; top strip not reserved");
             }
 
@@ -172,7 +185,25 @@ pub fn run() {
                 let app_handle = app.handle().clone();
 
                 std::thread::spawn(move || {
-                    let mut signals = match Signals::new([SIGUSR2, SIGWINCH]) {
+                    // Volume / brightness keys arrive as realtime signals.
+                    // SIGRTMIN is not a compile-time constant on glibc, so it
+                    // is resolved at runtime; SIGRTMIN()+0..4 are free for the
+                    // process.
+                    let vol_up = libc::SIGRTMIN();
+                    let vol_down = vol_up + 1;
+                    let vol_mute = vol_up + 2;
+                    let bright_up = vol_up + 3;
+                    let bright_down = vol_up + 4;
+
+                    let mut signals = match Signals::new([
+                        SIGUSR2,
+                        SIGWINCH,
+                        vol_up,
+                        vol_down,
+                        vol_mute,
+                        bright_up,
+                        bright_down,
+                    ]) {
                         Ok(signals) => signals,
                         Err(error) => {
                             eprintln!("[Aether] Failed to install signal handler: {error}");
@@ -205,6 +236,38 @@ pub fn run() {
                             SIGWINCH => {
                                 let _ = app_handle.emit("clipboard:toggle", ());
                                 focus(&app_handle);
+                            }
+                            // Volume / brightness: show the island OSD, but do
+                            // NOT steal focus — it is a passive overlay.
+                            signal if signal == vol_up => {
+                                let _ = app_handle.emit(
+                                    "system:control",
+                                    serde_json::json!({ "kind": "volume", "action": "up" }),
+                                );
+                            }
+                            signal if signal == vol_down => {
+                                let _ = app_handle.emit(
+                                    "system:control",
+                                    serde_json::json!({ "kind": "volume", "action": "down" }),
+                                );
+                            }
+                            signal if signal == vol_mute => {
+                                let _ = app_handle.emit(
+                                    "system:control",
+                                    serde_json::json!({ "kind": "volume", "action": "mute" }),
+                                );
+                            }
+                            signal if signal == bright_up => {
+                                let _ = app_handle.emit(
+                                    "system:control",
+                                    serde_json::json!({ "kind": "brightness", "action": "up" }),
+                                );
+                            }
+                            signal if signal == bright_down => {
+                                let _ = app_handle.emit(
+                                    "system:control",
+                                    serde_json::json!({ "kind": "brightness", "action": "down" }),
+                                );
                             }
                             _ => {}
                         }
@@ -264,9 +327,7 @@ pub fn run() {
                     );
                     // Any crossing that leaves or enters the toplevel (moving
                     // between child windows, Inferior, is not a real hover).
-                    let is_toplevel = |d: gtk::gdk::NotifyType| {
-                        d != gtk::gdk::NotifyType::Inferior
-                    };
+                    let is_toplevel = |d: gtk::gdk::NotifyType| d != gtk::gdk::NotifyType::Inferior;
                     let last_motion: std::rc::Rc<std::cell::Cell<f64>> =
                         std::rc::Rc::new(std::cell::Cell::new(0.0));
 

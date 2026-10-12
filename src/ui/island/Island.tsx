@@ -10,7 +10,12 @@ import ClipboardPanel from "../../component/clipboard/ClipboardPanel";
 import NotificationPanel from "../../component/notifications/NotificationPanel";
 import type { Notification } from "../../component/notifications/NotificationPanel";
 import NotificationPopup from "../../component/notifications/NotificationPopup";
+import SystemFeedback, {
+    type FeedbackMode,
+    type BrightnessDirection,
+} from "../../component/osd/SystemFeedback";
 
+import { systemControls } from "../../services/systemControls";
 /*
  * Launcher heights, one entry per visible result row. Each step is a row of
  * 56px on top of the 64px input and ~17px of list chrome (border + padding);
@@ -37,16 +42,17 @@ function getIslandShape(
     wifiMode: boolean,
     notificationMode: boolean,
     musicMode: boolean,
+    feedbackMode: boolean,
     hovered: boolean,
     showCava: boolean,
 ) {
     if (launcherMode) {
         const h =
             LAUNCHER_PIXEL_HEIGHTS[
-                Math.min(
-                    launcherResultCount,
-                    LAUNCHER_PIXEL_HEIGHTS.length - 1,
-                )
+            Math.min(
+                launcherResultCount,
+                LAUNCHER_PIXEL_HEIGHTS.length - 1,
+            )
             ];
         return [{ x: 50, y: 0, width: 460, height: h }];
     }
@@ -61,6 +67,14 @@ function getIslandShape(
     }
     if (musicMode) {
         return [{ x: 0, y: 0, width: 560, height: 144 }];
+    }
+    /*
+     * Volume / brightness OSD: a compact bar that replaces the pill while the
+     * value is being adjusted. Matches the container size below (300x64,
+     * centred in the 560px window).
+     */
+    if (feedbackMode) {
+        return [{ x: 130, y: 0, width: 300, height: 64 }];
     }
     /*
      * A popup replaces the pill for its whole lifetime, so the window stays
@@ -104,7 +118,7 @@ export default function Island() {
     const islandRef = useRef<HTMLDivElement>(null);
     const mochiGroupRef = useRef<HTMLDivElement>(null);
     const dlog = useCallback((m: string) => {
-        invoke("debug_log", { msg: m }).catch(() => {});
+        invoke("debug_log", { msg: m }).catch(() => { });
     }, []);
     const [wifiShift, setWifiShift] = useState(0);
     const openWifi = useCallback(() => {
@@ -124,7 +138,145 @@ export default function Island() {
             }
         });
     }, []);
+    const [feedbackMode, setFeedbackMode] =
+        useState<FeedbackMode>(null);
 
+    const [volume, setVolume] = useState(50);
+    const [muted, setMuted] = useState(false);
+    const [brightness, setBrightness] = useState(50);
+
+    const [brightnessDirection, setBrightnessDirection] =
+        useState<BrightnessDirection>(null);
+
+    // True while the OSD is fading out, so the container keeps its size until
+    // the animation finishes (see `feedbackActive`).
+    const [feedbackClosing, setFeedbackClosing] = useState(false);
+    const feedbackActive = feedbackMode != null;
+
+    const feedbackTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+    const feedbackCloseTimer = useRef<ReturnType<typeof setTimeout> | null>(
+        null,
+    );
+
+    /*
+     * Show the OSD and keep it up while the value is being adjusted — every
+     * press restarts the dismiss timer. On dismiss, fade out first so the
+     * island can tween back down without a snap.
+     */
+    const showSystemFeedback = (
+        mode: Exclude<FeedbackMode, null>,
+        direction: BrightnessDirection = null,
+    ) => {
+        if (feedbackTimer.current) {
+            clearTimeout(feedbackTimer.current);
+        }
+        if (feedbackCloseTimer.current) {
+            clearTimeout(feedbackCloseTimer.current);
+        }
+
+        setFeedbackClosing(false);
+        setFeedbackMode(mode);
+        setBrightnessDirection(direction);
+
+        feedbackTimer.current = setTimeout(() => {
+            setFeedbackClosing(true);
+            feedbackCloseTimer.current = setTimeout(() => {
+                setFeedbackMode(null);
+                setBrightnessDirection(null);
+                setFeedbackClosing(false);
+                feedbackCloseTimer.current = null;
+            }, 280);
+            feedbackTimer.current = null;
+        }, 1600);
+    };
+
+    useEffect(() => {
+        return () => {
+            if (feedbackTimer.current) {
+                clearTimeout(feedbackTimer.current);
+            }
+            if (feedbackCloseTimer.current) {
+                clearTimeout(feedbackCloseTimer.current);
+            }
+        };
+    }, []);
+    const handleVolumeIncrease = async () => {
+        try {
+            const state = await systemControls.increaseVolume();
+
+            setVolume(state.percent);
+            setMuted(state.muted);
+            showSystemFeedback("volume");
+        } catch (error) {
+            console.error("Volume increase failed:", error);
+        }
+    };
+
+    const handleVolumeDecrease = async () => {
+        try {
+            const state = await systemControls.decreaseVolume();
+
+            setVolume(state.percent);
+            setMuted(state.muted);
+            showSystemFeedback("volume");
+        } catch (error) {
+            console.error("Volume decrease failed:", error);
+        }
+    };
+
+    const handleMuteToggle = async () => {
+        try {
+            const state = await systemControls.toggleMute();
+
+            setVolume(state.percent);
+            setMuted(state.muted);
+            showSystemFeedback("volume");
+        } catch (error) {
+            console.error("Mute toggle failed:", error);
+        }
+    };
+
+    const handleBrightnessIncrease = async () => {
+        try {
+            const state = await systemControls.increaseBrightness();
+
+            setBrightness(state.percent);
+            showSystemFeedback("brightness", "up");
+        } catch (error) {
+            console.error("Brightness increase failed:", error);
+        }
+    };
+
+    const handleBrightnessDecrease = async () => {
+        try {
+            const state = await systemControls.decreaseBrightness();
+
+            setBrightness(state.percent);
+            showSystemFeedback("brightness", "down");
+        } catch (error) {
+            console.error("Brightness decrease failed:", error);
+        }
+    };
+
+    /*
+     * The volume / brightness handlers are rebuilt every render, but the
+     * `system:control` listener is installed once. Keep the handlers behind a
+     * ref so that one listener always calls the current versions.
+     */
+    const controlRef = useRef({
+        handleVolumeIncrease,
+        handleVolumeDecrease,
+        handleMuteToggle,
+        handleBrightnessIncrease,
+        handleBrightnessDecrease,
+    });
+    controlRef.current = {
+        handleVolumeIncrease,
+        handleVolumeDecrease,
+        handleMuteToggle,
+        handleBrightnessIncrease,
+        handleBrightnessDecrease,
+    };
     /*
      * True while the app launcher is open. It has no window of its own any
      * more — Super+Space emits launcher:toggle into this window and the
@@ -152,7 +304,7 @@ export default function Island() {
         pointerInsideRef.current = false;
         collapsingRef.current = true;
         if (!suppressFocusRestoreRef.current) {
-            invoke("focus_last_window").catch(() => {});
+            invoke("focus_last_window").catch(() => { });
         }
     }, []);
 
@@ -170,7 +322,7 @@ export default function Island() {
         pointerInsideRef.current = false;
         collapsingRef.current = true;
         if (!suppressFocusRestoreRef.current) {
-            invoke("focus_last_window").catch(() => {});
+            invoke("focus_last_window").catch(() => { });
         }
     }, []);
 
@@ -291,7 +443,8 @@ export default function Island() {
         !wifiMode &&
         !launcherMode &&
         !clipboardMode &&
-        !notificationMode;
+        !notificationMode &&
+        !feedbackMode;
 
     /*
      * The launcher sizes itself to its matches, growing a row at a time and
@@ -299,10 +452,10 @@ export default function Island() {
      */
     const launcherHeightClass =
         LAUNCHER_HEIGHTS[
-            Math.min(
-                launcherResultCount,
-                LAUNCHER_HEIGHTS.length - 1,
-            )
+        Math.min(
+            launcherResultCount,
+            LAUNCHER_HEIGHTS.length - 1,
+        )
         ];
 
     useEffect(() => {
@@ -380,7 +533,7 @@ export default function Island() {
                 () => {
                     // Toggling the open launcher closed → hand focus back.
                     if (launcherModeRef.current) {
-                        invoke("focus_last_window").catch(() => {});
+                        invoke("focus_last_window").catch(() => { });
                     } else {
                         // The two panels share the same overlay slot, so
                         // opening one must dismiss the other.
@@ -424,7 +577,7 @@ export default function Island() {
                 () => {
                     // Toggling the open clipboard closed → hand focus back.
                     if (clipboardModeRef.current) {
-                        invoke("focus_last_window").catch(() => {});
+                        invoke("focus_last_window").catch(() => { });
                     } else {
                         // Mirror launcher:toggle — only one overlay at a time.
                         setLauncherMode(false);
@@ -448,6 +601,52 @@ export default function Island() {
             unlisten?.();
         };
     }, []);
+
+    /*
+     * Volume / brightness keys. labwc runs `pkill -RTMIN+n -x aether-tauri`
+     * on the media keys; Rust turns each realtime signal into a
+     * `system:control` event here. Same StrictMode-safe pattern as
+     * launcher:toggle — one leaked listener would double every press.
+     */
+    useEffect(() => {
+        let unlisten: (() => void) | undefined;
+        let disposed = false;
+
+        const setup = async () => {
+            const stop = await listen<{
+                kind: "volume" | "brightness";
+                action: "up" | "down" | "mute";
+            }>("system:control", (event) => {
+                const { kind, action } = event.payload;
+                dlog(`system:control kind=${kind} action=${action}`);
+
+                const handlers = controlRef.current;
+
+                if (kind === "volume") {
+                    if (action === "up") handlers.handleVolumeIncrease();
+                    else if (action === "down") handlers.handleVolumeDecrease();
+                    else handlers.handleMuteToggle();
+                } else if (action === "up") {
+                    handlers.handleBrightnessIncrease();
+                } else {
+                    handlers.handleBrightnessDecrease();
+                }
+            });
+
+            if (disposed) {
+                stop();
+            } else {
+                unlisten = stop;
+            }
+        };
+
+        setup();
+
+        return () => {
+            disposed = true;
+            unlisten?.();
+        };
+    }, [dlog]);
 
     useEffect(() => {
         const handleKeyDown = (e: KeyboardEvent) => {
@@ -521,7 +720,7 @@ export default function Island() {
         closingRef.current = true;
         window.clearTimeout(noticeTimerRef.current);
         setNoticeClosing(true);
-        noticeTimerRef.current =     window.setTimeout(() => {
+        noticeTimerRef.current = window.setTimeout(() => {
             closingRef.current = false;
             setNoticeClosing(false);
             setNotice(null);
@@ -672,6 +871,7 @@ export default function Island() {
             wifiMode,
             notificationMode,
             musicMode,
+            feedbackActive,
             hovered,
             showCava,
         );
@@ -684,7 +884,7 @@ export default function Island() {
         }
 
         dlog(`effect isExpanded=${isExpanded} hovered=${hovered} notice=${noticeActive}`);
-        if (isExpanded || noticePop) {
+        if (isExpanded || noticePop || feedbackActive) {
             invoke("set_input_shape", { rects }).catch(console.error);
         } else {
             // Shrink the input shape after the CSS transition finishes.
@@ -711,6 +911,7 @@ export default function Island() {
         wifiMode,
         notificationMode,
         musicMode,
+        feedbackActive,
         hovered,
         showCava,
         isExpanded,
@@ -775,31 +976,37 @@ export default function Island() {
                                 h-[320px]
                                 rounded-b-[16px]
                             `
-                                : wifiMode
-                                    ? `
+                                    : wifiMode
+                                        ? `
                                 w-[464px]
                                 h-[280px]
                                 rounded-b-[16px]
                             `
-                            : musicMode
-                                ? `
+                                        : musicMode
+                                            ? `
                                 w-[560px]
                                 h-[144px]
                                 rounded-b-[16px]
                             `
-                                : noticePop
-                                    ? `
+                                            : feedbackMode
+                                                ? `
+                                w-[300px]
+                                h-[64px]
+                                rounded-b-[16px]
+                            `
+                                                : noticePop
+                                                    ? `
                                 w-[464px]
                                 h-[108px]
                                 rounded-b-[16px]
                             `
-                                    : hovered
-                                        ? `
+                                                : hovered
+                                                    ? `
                                 w-[464px]
                                 h-[224px]
                                 rounded-b-[16px]
                             `
-                                        : `
+                                                    : `
                                 w-[116px]
                                 h-[28px]
                                 rounded-b-[10px]
@@ -822,6 +1029,8 @@ export default function Island() {
                         transition-all
                         duration-500
                         ease-[cubic-bezier(0.16,1,0.3,1)]
+
+                        ${feedbackMode ? "opacity-0" : ""}
 
                         ${launcherMode || clipboardMode
                                 ? "h-[64px]"
@@ -898,7 +1107,7 @@ export default function Island() {
                                             musicMode
                                         )
                                     }
-                                    />
+                                />
                             </div>
 
                             <div
@@ -910,11 +1119,11 @@ export default function Island() {
                                 ${musicMode ||
                                         launcherMode ||
                                         clipboardMode
-                                    ? "hidden"
-                                    : wifiMode
-                                        ? "opacity-0"
-                                        : "opacity-100"
-                                }
+                                        ? "hidden"
+                                        : wifiMode
+                                            ? "opacity-0"
+                                            : "opacity-100"
+                                    }
                             `}
                             >
                                 <span
@@ -926,9 +1135,9 @@ export default function Island() {
                                 ease-[cubic-bezier(0.16,1,0.3,1)]
 
                                 ${hovered
-                                        ? "text-[36px] font-light text-neutral-100"
-                                        : "text-[15px] font-bold text-neutral-300"
-                                    }
+                                            ? "text-[36px] font-light text-neutral-100"
+                                            : "text-[15px] font-bold text-neutral-300"
+                                        }
                             `}
                                 >
                                     {time}
@@ -945,9 +1154,9 @@ export default function Island() {
                                 ease-[cubic-bezier(0.16,1,0.3,1)]
 
                                 ${hovered
-                                        ? "text-[11px]"
-                                        : "hidden"
-                                    }
+                                            ? "text-[11px]"
+                                            : "hidden"
+                                        }
                             `}
                                 >
                                     {date}
@@ -969,62 +1178,113 @@ export default function Island() {
                         !launcherMode &&
                         !clipboardMode &&
                         !notificationMode &&
+                        !feedbackMode &&
                         (musicMode || !noticeActive) && (
-                        <div
-                            className={`
+                            <div
+                                className={`
                             absolute
 
                             ${musicMode
-                                    ? `top-[26px] left-[128px] right-0 pl-0 pr-6`
-                                    : `
+                                        ? `top-[26px] left-[128px] right-0 pl-0 pr-6`
+                                        : `
                                     top-[104px]
                                     left-0
                                     right-0
                                     px-5
                                 `
-                                }
+                                    }
 
                             transition-all
                             duration-500
                             ease-[cubic-bezier(0.16,1,0.3,1)]
 
                             ${hovered
-                                    ? `
+                                        ? `
                                         translate-y-0
                                         opacity-100
                                         delay-150
                                     `
-                                    : `
+                                        : `
                                         translate-y-4
                                         opacity-0
                                         delay-0
                                     `
-                                }
+                                    }
                         `}
-                        >
-                            <IslandExpanded
-                                onWifiOpen={openWifi}
-                                onNotificationsOpen={openNotifications}
-                                onMusicVisibleChange={
-                                    handleMusicVisibleChange
-                                }
-                            />
-                        </div>
-                    )}
+                            >
+                                <IslandExpanded
+                                    onWifiOpen={openWifi}
+                                    onNotificationsOpen={openNotifications}
+                                    onMusicVisibleChange={
+                                        handleMusicVisibleChange
+                                    }
+                                />
+                            </div>
+                        )}
 
                     {noticeActive &&
                         !notificationMode &&
                         !launcherMode &&
                         !clipboardMode &&
                         !wifiMode &&
-                        !musicMode && (
-                        <NotificationPopup
-                            notification={notice}
-                            closing={noticeClosing}
-                            onClose={dismissNotice}
-                            onOpen={openNotifications}
-                        />
-                    )}
+                        !musicMode &&
+                        !feedbackMode && (
+                            <NotificationPopup
+                                notification={notice}
+                                closing={noticeClosing}
+                                onClose={dismissNotice}
+                                onOpen={openNotifications}
+                            />
+                        )}
+
+                    {/*
+                     * Volume / brightness OSD: a compact centred bar with Mochi
+                     * and a value readout. It replaces the pill for a moment
+                     * and never takes focus (the media keys are passive).
+                     */}
+                    {feedbackMode &&
+                        !notificationMode &&
+                        !launcherMode &&
+                        !clipboardMode &&
+                        !wifiMode &&
+                        !musicMode &&
+                        !noticeActive && (
+                            <div
+                                className={`
+                                    absolute
+                                    inset-0
+                                    z-30
+
+                                    flex
+                                    items-center
+                                    gap-3
+                                    px-4
+
+                                    transition-all
+                                    duration-300
+                                    ease-[cubic-bezier(0.16,1,0.3,1)]
+
+                                    ${feedbackClosing
+                                        ? "translate-y-3 opacity-0"
+                                        : "translate-y-0 opacity-100"
+                                    }
+                                `}
+                            >
+                                <MochiCanvas
+                                    expanded
+                                    greet={false}
+                                    scale={0.42}
+                                />
+
+                                <SystemFeedback
+                                    mode={feedbackMode}
+                                    volume={volume}
+                                    muted={muted}
+                                    brightness={brightness}
+                                    brightnessDirection={brightnessDirection}
+                                />
+                            </div>
+                        )}
 
                     {launcherMode && (
                         <AppLauncher

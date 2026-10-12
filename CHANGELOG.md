@@ -12,6 +12,10 @@ to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   templates, and CI.
 - Notification toast in the island with a Mochi state per severity
   (`normal` / `warning` / `critical`), smooth fade in/out.
+- Volume / brightness OSD: a compact island bar with Mochi and a progress
+  readout, driven by the media keys. labwc keybinds send `SIGRTMIN+0..4`
+  (volume up/down/mute, brightness up/down), which the app turns into a
+  passive overlay that never steals focus.
 
 ## [0.1.0]
 
