@@ -7,6 +7,7 @@ clipboard history, a Wi-Fi switcher, a media player and a notification centre â€
 with **Mochi**, an animated companion, reacting along the way.
 
 [![CI](https://github.com/jeganxthan/aether/actions/workflows/ci.yml/badge.svg)](https://github.com/jeganxthan/aether/actions/workflows/ci.yml)
+[![Website](https://img.shields.io/badge/website-live-6EA8FE.svg)](https://jeganxthan.github.io/aether/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Platform: Linux / Wayland](https://img.shields.io/badge/platform-Linux%20%7C%20Wayland-blue.svg)](#requirements)
 [![Built with Tauri](https://img.shields.io/badge/built%20with-Tauri%20v2-24C8DB.svg)](https://tauri.app/)
