@@ -17,6 +17,14 @@ to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   (volume up/down/mute, brightness up/down), which the app turns into a
   passive overlay that never steals focus.
 
+### Fixed
+
+- The reserved top strip is now pinned to the output the island window is on,
+  instead of being placed on the output under the pointer (which made it
+  nondeterministic on a multi-monitor setup).
+- The volume OSD no longer shows the wrong icon: the low / high speaker
+  assets were swapped.
+
 ## [0.1.0]
 
 ### Added

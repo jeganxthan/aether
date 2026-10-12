@@ -123,7 +123,24 @@ pub fn run() {
             // Reserve the top strip with a transparent layer-shell surface so
             // maximized / tiled windows stay below the island. The exclusive
             // zone is static — it is never toggled (see `space.rs`).
-            if space::SpaceReserver::start()
+            //
+            // The strip is pinned to the output the island window is on: a
+            // layer surface created with a NULL output would be placed on the
+            // output under the pointer, which is nondeterministic on a
+            // multi-monitor setup.
+            let (monitor_name, monitor_size) = app
+                .get_webview_window("aether-widget")
+                .and_then(|w| w.current_monitor().ok().flatten())
+                .map(|m| {
+                    let size = m.size();
+                    (
+                        m.name().map(|name| name.to_string()),
+                        Some((size.width as i32, size.height as i32)),
+                    )
+                })
+                .unwrap_or((None, None));
+
+            if space::SpaceReserver::start(monitor_name.as_deref(), monitor_size)
                 .map(|s| app.manage(s))
                 .is_none()
             {

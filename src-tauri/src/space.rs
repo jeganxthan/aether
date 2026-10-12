@@ -9,6 +9,10 @@
 // zone at all times, so maximized / tiled windows are always anchored below
 // it and the island's transparent strip is static — hovering the island or
 // opening a panel never reflows windows.
+//
+// The strip is pinned to the output the island window lives on. A layer
+// surface created with a NULL output is placed on the output under the
+// pointer, which is nondeterministic on a multi-monitor setup.
 
 use std::ffi::CString;
 use std::fs::File;
@@ -20,7 +24,7 @@ use std::thread;
 
 use wayland_client::globals::{registry_queue_init, GlobalListContents};
 use wayland_client::protocol::{
-    wl_buffer, wl_compositor, wl_region, wl_registry, wl_shm, wl_shm_pool, wl_surface,
+    wl_buffer, wl_compositor, wl_output, wl_region, wl_registry, wl_shm, wl_shm_pool, wl_surface,
 };
 use wayland_client::{Connection, Dispatch, QueueHandle};
 use wayland_protocols_wlr::layer_shell::v1::client::{
@@ -32,13 +36,16 @@ use wayland_protocols_wlr::layer_shell::v1::client::{
 const RESERVED_HEIGHT: i32 = 28;
 
 // The fields are never read: the Mutex<Shared> exists purely to *own* the
-// connection and layer-shell proxies for the lifetime of the app, keeping the
-// strip mapped. The set_reserved toggle was removed — the strip is static.
+// connection, layer-shell proxies and the chosen output for the lifetime of
+// the app, keeping the strip mapped. The set_reserved toggle was removed —
+// the strip is static.
 #[allow(dead_code)]
 struct Shared {
     conn: Connection,
     surface: wl_surface::WlSurface,
     layer_surface: ZwlrLayerSurfaceV1,
+    // Keeping the output proxy alive keeps the layer surface pinned to it.
+    output: Option<wl_output::WlOutput>,
 }
 
 /// Handle to the background strip. Cheap to clone the inner `Arc`.
@@ -47,12 +54,24 @@ pub struct SpaceReserver {
     shared: Arc<Mutex<Shared>>,
 }
 
+#[derive(Debug, Default)]
+struct OutputInfo {
+    name: Option<String>,
+    description: Option<String>,
+    mode: Option<(i32, i32)>,
+}
+
 impl SpaceReserver {
-    /// Connect and map the strip. Returns `None` (quietly) when layer-shell is
-    /// unavailable or we are not on Wayland, so the rest of the app still runs.
-    pub fn start() -> Option<Self> {
+    /// Connect and map the strip on the output the island is on. Returns
+    /// `None` (quietly) when layer-shell is unavailable or we are not on
+    /// Wayland, so the rest of the app still runs.
+    ///
+    /// `monitor_name` / `monitor_size` come from the island window's current
+    /// monitor and are matched against every `wl_output`: first by connector
+    /// name / description, then by mode size.
+    pub fn start(monitor_name: Option<&str>, monitor_size: Option<(i32, i32)>) -> Option<Self> {
         let conn = Connection::connect_to_env().ok()?;
-        let (globals, queue) = registry_queue_init::<State>(&conn).ok()?;
+        let (globals, mut queue) = registry_queue_init::<State>(&conn).ok()?;
         let qh = queue.handle();
 
         let compositor: wl_compositor::WlCompositor = globals.bind(&qh, 1..=6, ()).ok()?;
@@ -66,9 +85,50 @@ impl SpaceReserver {
         surface.set_input_region(Some(&empty));
         empty.destroy();
 
+        // Bind every output (v4 when available) so we can read its connector
+        // name, description and mode, then pin the strip to the island's.
+        let registry = globals.registry();
+        let mut outputs: Vec<(wl_output::WlOutput, Arc<Mutex<OutputInfo>>)> = Vec::new();
+        for global in globals.contents().clone_list() {
+            if global.interface == "wl_output" {
+                let info = Arc::new(Mutex::new(OutputInfo::default()));
+                let version = global.version.min(4);
+                let output: wl_output::WlOutput =
+                    registry.bind(global.name, version, &qh, info.clone());
+                outputs.push((output, info));
+            }
+        }
+
+        let mut state = State {
+            shm,
+            qh: qh.clone(),
+            surface: surface.clone(),
+            buffer: None,
+            buffer_file: None,
+        };
+
+        // Let the compositor send each output's info before we choose.
+        for _ in 0..3 {
+            if queue.roundtrip(&mut state).is_err() {
+                return None;
+            }
+        }
+
+        let chosen = choose_index(&outputs, monitor_name, monitor_size);
+        let expected = chosen
+            .and_then(|index| outputs[index].1.lock().ok().map(|info| info.name.clone()))
+            .flatten();
+        eprintln!(
+            "[space] reserving top strip on {:?} (matched {})",
+            expected,
+            chosen.is_some()
+        );
+
+        let target = chosen.map(|index| outputs[index].0.clone());
+
         let layer_surface = layer_shell.get_layer_surface(
             &surface,
-            None,
+            target.as_ref(),
             zwlr_layer_shell_v1::Layer::Background,
             "aether-space".to_string(),
             &qh,
@@ -86,26 +146,20 @@ impl SpaceReserver {
 
         surface.commit();
 
+        // Keep the chosen output (if any) alive for the process lifetime; the
+        // rest are released when `outputs` drops at the end of this function.
+        let output = target;
+
         let shared = Arc::new(Mutex::new(Shared {
             conn: conn.clone(),
             surface: surface.clone(),
             layer_surface: layer_surface.clone(),
+            output,
         }));
 
-        let mut state = State {
-            shm,
-            qh: qh.clone(),
-            surface,
-            buffer: None,
-            buffer_file: None,
-        };
-
-        thread::spawn(move || {
-            let mut queue = queue;
-            loop {
-                if queue.blocking_dispatch(&mut state).is_err() {
-                    break;
-                }
+        thread::spawn(move || loop {
+            if queue.blocking_dispatch(&mut state).is_err() {
+                break;
             }
         });
 
@@ -115,6 +169,50 @@ impl SpaceReserver {
 
         Some(Self { shared })
     }
+}
+
+/// Pick the output that matches the island's monitor. Prefers a connector
+/// name / description match, then falls back to the mode size. Returns `None`
+/// when nothing matches (the compositor then places the surface on the output
+/// under the pointer, the pre-existing behaviour).
+fn choose_index(
+    outputs: &[(wl_output::WlOutput, Arc<Mutex<OutputInfo>>)],
+    monitor_name: Option<&str>,
+    monitor_size: Option<(i32, i32)>,
+) -> Option<usize> {
+    let matches_name = |info: &OutputInfo| {
+        let Some(target) = monitor_name else {
+            return false;
+        };
+        let target = target.to_lowercase();
+        info.name
+            .as_deref()
+            .map(|name| name.to_lowercase() == target)
+            .unwrap_or(false)
+            || info
+                .description
+                .as_deref()
+                .map(|desc| desc.to_lowercase().contains(&target))
+                .unwrap_or(false)
+    };
+
+    if monitor_name.is_some() {
+        if let Some(index) = outputs.iter().position(|(_, info)| {
+            info.lock().map(|info| matches_name(&info)).unwrap_or(false)
+        }) {
+            return Some(index);
+        }
+    }
+
+    if let Some(size) = monitor_size {
+        if let Some(index) = outputs.iter().position(|(_, info)| {
+            info.lock().map(|info| info.mode == Some(size)).unwrap_or(false)
+        }) {
+            return Some(index);
+        }
+    }
+
+    None
 }
 
 struct State {
@@ -180,6 +278,27 @@ impl Dispatch<wl_registry::WlRegistry, GlobalListContents> for State {
         _conn: &Connection,
         _qh: &QueueHandle<Self>,
     ) {
+    }
+}
+
+impl Dispatch<wl_output::WlOutput, Arc<Mutex<OutputInfo>>> for State {
+    fn event(
+        _state: &mut Self,
+        _proxy: &wl_output::WlOutput,
+        event: wl_output::Event,
+        data: &Arc<Mutex<OutputInfo>>,
+        _conn: &Connection,
+        _qh: &QueueHandle<Self>,
+    ) {
+        let Ok(mut info) = data.lock() else {
+            return;
+        };
+        match event {
+            wl_output::Event::Name { name } => info.name = Some(name),
+            wl_output::Event::Description { description } => info.description = Some(description),
+            wl_output::Event::Mode { width, height, .. } => info.mode = Some((width, height)),
+            _ => {}
+        }
     }
 }
 
