@@ -1089,18 +1089,20 @@ export default function Island() {
                                 transform: `
         translate(
             ${wifiMode
-                                        ? wifiShift
-                                        : musicMode
-                                            ? -190
-                                            : launcherMode ||
-                                                clipboardMode
-                                                ? -179
-                                                : 0
-                                    }px,
-                                ${musicMode
-                                        ? 17
-                                        : 0
-                                    }px
+                        ? wifiShift
+                        : musicMode
+                            ? -190
+                            : notificationMode
+                                ? -179
+                                : launcherMode ||
+                                    clipboardMode
+                                    ? -179
+                                    : 0
+                    }px,
+                ${musicMode
+                        ? 17
+                        : 0
+                    }px
         )
     `,
                             }}

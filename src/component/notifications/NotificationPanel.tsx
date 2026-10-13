@@ -183,26 +183,28 @@ export default function NotificationPanel({
     return (
         <div
             className="
+                pointer-events-none
+
                 absolute
                 inset-0
 
                 flex
                 flex-col
-
-                overflow-hidden
             "
         >
             {/* Header — left padding clears the island's Mochi. */}
             <div
-                className="
-                    flex
-                    h-[64px]
-                    shrink-0
-                    items-center
-                    gap-3
-                    pl-[101px]
-                    pr-4
-                "
+                    className="
+                        pointer-events-auto
+
+                        flex
+                        h-[64px]
+                        shrink-0
+                        items-center
+                        gap-3
+                        pl-[101px]
+                        pr-4
+                    "
             >
                 <span
                     className="
@@ -294,17 +296,19 @@ export default function NotificationPanel({
 
             {/* List */}
             <div
-                className="
-                    no-scrollbar
+                    className="
+                        pointer-events-auto
 
-                    min-h-0
-                    flex-1
+                        no-scrollbar
 
-                    overflow-y-auto
+                        min-h-0
+                        flex-1
 
-                    px-[8px]
-                    py-[6px]
-                "
+                        overflow-y-auto
+
+                        px-[8px]
+                        py-[6px]
+                    "
             >
                 {items.length === 0 && (
                     <div
