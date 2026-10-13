@@ -1219,6 +1219,12 @@ export default function Island() {
                         />
                     )}
 
+                    {notificationMode && (
+                        <NotificationPanel
+                            onClose={closeNotifications}
+                        />
+                    )}
+
                     {!wifiMode &&
                         !launcherMode &&
                         !clipboardMode &&
