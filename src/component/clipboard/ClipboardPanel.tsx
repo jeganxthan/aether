@@ -56,7 +56,7 @@ function relativeTime(seconds: number): string {
 
 /** Collapse runs of whitespace so multi-line snippets stay readable. */
 function preview(content: string): string {
-    return content.replace(/\s+/g, " ").trim();
+    return content.replace(/\s+/g, " ").trim().slice(0, 300);
 }
 
 export default function ClipboardPanel({
@@ -73,6 +73,20 @@ export default function ClipboardPanel({
 
     const [selectedIndex, setSelectedIndex] =
         useState(0);
+
+    /*
+     * The island takes ~500ms to expand. Rendering the whole history list
+     * during that window blocks the webview main thread, which starves the
+     * pill's CSS transition and makes it snap open (the launcher animates
+     * cleanly only because its rows are tiny). Hold the list back until the
+     * expansion has finished.
+     */
+    const [ready, setReady] = useState(false);
+
+    useEffect(() => {
+        const id = setTimeout(() => setReady(true), 520);
+        return () => clearTimeout(id);
+    }, []);
 
     useEffect(() => {
         const focusInput = () => inputRef.current?.focus();
@@ -378,8 +392,9 @@ export default function ClipboardPanel({
             />
 
             {/* List */}
-            <div
-                className="
+            {ready && (
+                <div
+                    className="
                     no-scrollbar
 
                     pointer-events-auto
@@ -549,7 +564,8 @@ export default function ClipboardPanel({
                         ))}
                     </div>
                 )}
-            </div>
+                </div>
+            )}
         </div>
     );
 }
