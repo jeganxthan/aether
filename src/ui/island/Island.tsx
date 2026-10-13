@@ -1149,6 +1149,7 @@ export default function Island() {
                                         !(
                                             launcherMode ||
                                             clipboardMode ||
+                                            notificationMode ||
                                             musicMode
                                         )
                                     }
@@ -1161,14 +1162,15 @@ export default function Island() {
                                 flex-col
                                 items-center
 
-                                ${musicMode ||
-                                        launcherMode ||
-                                        clipboardMode
-                                        ? "hidden"
-                                        : wifiMode
-                                            ? "opacity-0"
-                                            : "opacity-100"
-                                    }
+                                 ${musicMode ||
+                                         launcherMode ||
+                                         clipboardMode ||
+                                         notificationMode
+                                         ? "hidden"
+                                         : wifiMode
+                                             ? "opacity-0"
+                                             : "opacity-100"
+                                     }
                             `}
                             >
                                 <span
