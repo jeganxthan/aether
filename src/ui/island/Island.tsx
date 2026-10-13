@@ -64,7 +64,7 @@ function getIslandShape(
         return [{ x: 48, y: 0, width: 464, height: 280 }];
     }
     if (notificationMode) {
-        return [{ x: 48, y: 0, width: 464, height: 320 }];
+        return [{ x: 50, y: 0, width: 460, height: 64 }];
     }
     if (musicMode) {
         return [{ x: 0, y: 0, width: 560, height: 144 }];
@@ -1075,7 +1075,7 @@ export default function Island() {
 
                         ${feedbackMode ? "opacity-0" : ""}
 
-                        ${launcherMode || clipboardMode
+                        ${launcherMode || clipboardMode || notificationMode
                                 ? "h-[64px]"
                                 : hovered
                                     ? "h-[116px]"
@@ -1222,6 +1222,21 @@ export default function Island() {
                     {notificationMode && (
                         <NotificationPanel
                             onClose={closeNotifications}
+                        />
+                    )}
+
+                    {notificationMode && (
+                        <div
+                            className={`
+                                absolute
+                                inset-x-0
+                                top-0
+                                h-[64px]
+                                pointer-events-none
+                                transition-all
+                                duration-500
+                                ease-[cubic-bezier(0.16,1,0.3,1)]
+                            `}
                         />
                     )}
 
