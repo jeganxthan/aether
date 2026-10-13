@@ -23,7 +23,7 @@ labwc -r        # reload
 ```
 
 - `Super` + `Space` — toggle the launcher (`SIGUSR2`)
-- `Super` + `C` — toggle the clipboard (`SIGWINCH`)
+- `Super` + `C` — toggle the clipboard (`SIGRTMIN+5`)
 - Volume keys — show the volume OSD (`SIGRTMIN+0` / `+1` / `+2`)
 - Brightness keys — show the brightness OSD (`SIGRTMIN+3` / `+4`)
 

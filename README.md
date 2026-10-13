@@ -88,7 +88,7 @@ reliable under Wayland. Two things are required: the toggle keybinds and a
   <action name="Execute" command="pkill -USR2 -x aether-tauri"/>
 </keybind>
 <keybind key="W-c">
-  <action name="Execute" command="pkill -WINCH -x aether-tauri"/>
+  <action name="Execute" command="pkill -RTMIN+5 -x aether-tauri"/>
 </keybind>
 <keybind key="XF86AudioRaiseVolume">
   <action name="Execute" command="pkill -RTMIN+0 -x aether-tauri"/>

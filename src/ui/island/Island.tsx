@@ -310,7 +310,7 @@ export default function Island() {
 
     /*
      * True while the clipboard history is open. Like the launcher it is
-     * just another layout mode, opened by Super+C (SIGWINCH -> the
+     * just another layout mode, opened by Super+C (SIGRTMIN+5 -> the
      * clipboard:toggle event) rather than a window of its own.
      */
     const [clipboardMode, setClipboardMode] =

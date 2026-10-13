@@ -12,7 +12,7 @@
   Aether is driven by Unix signals because hardware global shortcuts do not
   work reliably under Wayland compositors:
     SIGUSR2       toggle the app launcher
-    SIGWINCH      toggle the clipboard history
+    SIGRTMIN+5    toggle the clipboard history
     SIGRTMIN+0    volume up        SIGRTMIN+1  volume down
     SIGRTMIN+2    toggle mute      SIGRTMIN+3  brightness up
     SIGRTMIN+4    brightness down
@@ -28,7 +28,7 @@
 
   <!-- Super + C -> toggle the clipboard history -->
   <keybind key="W-c">
-    <action name="Execute" command="pkill -WINCH -x aether-tauri"/>
+    <action name="Execute" command="pkill -RTMIN+5 -x aether-tauri"/>
   </keybind>
 
   <!-- Volume / brightness keys -> island OSD -->

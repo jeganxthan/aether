@@ -38,7 +38,7 @@ to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Notification capture and history.
 - Battery status and clock.
 - Mochi animated companion (ported from Coucou).
-- labwc integration via signals (`SIGUSR2` → launcher, `SIGWINCH` → clipboard).
+- labwc integration via signals (`SIGUSR2` → launcher, `SIGRTMIN+5` → clipboard).
 
 [Unreleased]: https://github.com/jeganxthan/aether/compare/v0.1.0...HEAD
 [0.1.0]: https://github.com/jeganxthan/aether/releases/tag/v0.1.0

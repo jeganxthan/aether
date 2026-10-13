@@ -273,13 +273,13 @@ export default function ClipboardPanel({
     return (
         <div
             className="
+                pointer-events-none
+
                 absolute
                 inset-0
 
                 flex
                 flex-col
-
-                overflow-hidden
             "
         >
             {/* Header — left padding clears the island's Mochi. */}
@@ -313,6 +313,8 @@ export default function ClipboardPanel({
                     }}
                     placeholder="Search clipboard..."
                     className="
+                        pointer-events-auto
+
                         min-w-0
                         flex-1
 
@@ -328,7 +330,7 @@ export default function ClipboardPanel({
                     spellCheck={false}
                 />
 
-                <div className="flex shrink-0 items-center gap-2">
+                <div className="pointer-events-auto flex shrink-0 items-center gap-2">
                     <button
                         type="button"
                         onClick={clear}
@@ -379,6 +381,8 @@ export default function ClipboardPanel({
             <div
                 className="
                     no-scrollbar
+
+                    pointer-events-auto
 
                     min-h-0
                     flex-1

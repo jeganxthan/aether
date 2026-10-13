@@ -190,13 +190,18 @@ pub fn run() {
             // Instead the compositor's rc.xml runs `pkill -<signal> -x
             // aether-tauri`, and this thread turns each signal into the event
             // the frontend listens for:
-            //   SIGUSR2  -> launcher:toggle  (Super+Space)
-            //   SIGWINCH -> clipboard:toggle (Super+C)
+            //   SIGUSR2    -> launcher:toggle  (Super+Space)
+            //   SIGRTMIN+5 -> clipboard:toggle (Super+C)
             {
                 // NOTE: WebKitGTK (JavaScriptCore) uses SIGUSR1 internally for
                 // thread suspension, so installing a handler for it crashes the
-                // web view. SIGUSR2 and SIGWINCH are free.
-                use signal_hook::consts::{SIGUSR2, SIGWINCH};
+                // web view. SIGUSR2 is free. Do NOT use SIGWINCH for the
+                // clipboard: the kernel delivers SIGWINCH to the foreground
+                // process group whenever the controlling terminal is resized
+                // (e.g. when the terminal running the app is maximized), which
+                // made the clipboard open unexpectedly. Realtime signals have no
+                // such side effects, so the clipboard uses SIGRTMIN+5.
+                use signal_hook::consts::SIGUSR2;
                 use signal_hook::iterator::Signals;
 
                 let app_handle = app.handle().clone();
@@ -211,10 +216,11 @@ pub fn run() {
                     let vol_mute = vol_up + 2;
                     let bright_up = vol_up + 3;
                     let bright_down = vol_up + 4;
+                    let clipboard = vol_up + 5;
 
                     let mut signals = match Signals::new([
                         SIGUSR2,
-                        SIGWINCH,
+                        clipboard,
                         vol_up,
                         vol_down,
                         vol_mute,
@@ -250,7 +256,7 @@ pub fn run() {
                                 let _ = app_handle.emit("launcher:toggle", ());
                                 focus(&app_handle);
                             }
-                            SIGWINCH => {
+                            signal if signal == clipboard => {
                                 let _ = app_handle.emit("clipboard:toggle", ());
                                 focus(&app_handle);
                             }
