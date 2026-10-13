@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
+import { Settings } from "lucide-react";
 import IslandExpanded from "./IslandExpanded";
 import MochiCanvas from "./mochi/MochiCanvas";
 import WifiPanel from "../../component/wifi/WifiPanel";
@@ -1014,6 +1015,48 @@ export default function Island() {
                         }
                 `}
                 >
+                    {/*
+                     * Settings affordance in the expanded island's top-right
+                     * corner. Placeholder for now — wiring comes later.
+                     */}
+                    {hovered &&
+                        !launcherMode &&
+                        !clipboardMode &&
+                        !wifiMode &&
+                        !notificationMode &&
+                        !musicMode &&
+                        !feedbackMode && (
+                            <button
+                                type="button"
+                                title="Settings"
+                                aria-label="Settings"
+                                className="
+                                    absolute
+                                    right-3
+                                    top-3
+                                    z-30
+
+                                    flex
+                                    h-7
+                                    w-7
+                                    items-center
+                                    justify-center
+
+                                    rounded-full
+
+                                    text-neutral-400
+
+                                    transition-colors
+                                    duration-200
+
+                                    hover:bg-white/[0.07]
+                                    hover:text-neutral-200
+                                "
+                            >
+                                <Settings size={16} />
+                            </button>
+                        )}
+
                     <div
                         className={`
                         absolute
