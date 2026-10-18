@@ -1,0 +1,7 @@
+[package]
+name = "aether-panel"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+aether = { package = "aether-ui", path = "../aether-ui" }

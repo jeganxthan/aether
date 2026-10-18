@@ -1,0 +1,12 @@
+[package]
+name = "aether-shell"
+version = "0.1.0"
+edition = "2024"
+
+[workspace]
+members = [
+    "crates/aether-panel",
+    "crates/aether-services",
+    "crates/aether-ui",
+]
+resolver = "3"
