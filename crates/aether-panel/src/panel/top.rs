@@ -1,8 +1,14 @@
-use aether::{Color, Full, Layer, LayerWindow, Parent, Rectangle, Vertical, Zone};
+use aether::{
+    Align, Color, Full, Layer, LayerWindow, Parent, Rectangle, Text, Vertical, Zone,
+};
+
+use crate::services::clock::clock;
 
 const PANEL_HEIGHT: f32 = 26.0;
 
 pub fn panel() -> LayerWindow {
+    let time = clock().current();
+
     LayerWindow::new()
         .width(Full)
         .height(PANEL_HEIGHT)
@@ -14,6 +20,12 @@ pub fn panel() -> LayerWindow {
             Rectangle::new()
                 .width(Parent)
                 .height(Parent)
-                .fill(Color::BLACK),
+                .fill(Color::BLACK)
+                .align_child(Align::Center, Align::Center)
+                .child(
+                    Text::new(time)
+                        .color(Color::WHITE)
+                        .size(12.0),
+                ),
         )
 }

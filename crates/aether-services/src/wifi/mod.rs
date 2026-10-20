@@ -1,5 +1,3 @@
-pub mod manager;
-pub mod types;
+mod toggle;
 
-pub use manager::WifiManager;
-pub use types::{ConnectedWifi, WifiAccessPoint, WifiState, WifiStatus};
+pub use toggle::WifiToggle;

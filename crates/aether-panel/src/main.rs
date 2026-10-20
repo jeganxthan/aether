@@ -1,14 +1,17 @@
 mod island_state;
 mod panel;
+mod services;
 
 use aether::App;
-use panel::island::island;
-// use panel::island::panel;
+use panel::top::panel;
+// use panel::reserve::reserve;
+// use panel::island::island;
 
 fn main() {
     App::new()
-        .window(island)
-        // .window(panel)
+        // .window(reserve)
+        .window(panel)
+        // .window(island)
         .without_ipc()
         .run();
 }
