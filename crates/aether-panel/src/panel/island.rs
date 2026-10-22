@@ -43,7 +43,7 @@ pub fn island() -> LayerWindow {
         width: width.round() as i32,
         height: height.round() as i32,
     };
-    let time = clock().current();
+    let time = clock();
     LayerWindow::new()
         .width(EXPANDED_WIDTH)
         .height(EXPANDED_HEIGHT)

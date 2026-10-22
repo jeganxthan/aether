@@ -46,6 +46,20 @@ impl ScrollArea {
         f32::max(content - area.height, 0.0)
     }
 
+    /*
+     * Moves the area to a given offset, so a view can bring a row into sight
+     * without the pointer. The value is clamped the same way scrolling is, so it
+     * never moves past either end.
+     */
+    pub fn scroll_to(id: &'static str, offset: f32) {
+        offsets::set(id, f32::max(offset, 0.0));
+    }
+
+    // how far the area is moved right now
+    pub fn offset(id: &'static str) -> f32 {
+        offsets::get(id)
+    }
+
     // the child at its full size, moved up by the offset
     fn child_area(&self, area: Area) -> Area {
         let offset = offsets::get(self.id).clamp(0.0, self.farthest(area));

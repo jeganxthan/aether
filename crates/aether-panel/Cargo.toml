@@ -4,6 +4,6 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-aether = { package = "aether-ui", path = "../aether-ui" }
+aether = { package = "aether-ui", path = "../../crates/aether-ui" }
 aether-services = { path = "../aether-services" }
-tokio = { version = "1", features = ["rt", "rt-multi-thread"] }
+tokio = { version = "1", features = ["rt", "rt-multi-thread", "time", "net", "io-util"] }

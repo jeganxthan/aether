@@ -6,5 +6,9 @@ edition = "2024"
 
 [dependencies]
 chrono = { version = "0.4", default-features = true }
-tokio = { version = "1", features = ["sync", "time", "rt", "macros", "rt-multi-thread"] }
+tokio = { version = "1", features = ["sync", "time", "rt", "macros", "rt-multi-thread", "signal", "net"] }
 nmrs = "3.5.7"
+zbus = { version = "5", default-features = false, features = ["tokio"] }
+zvariant = "5"
+udev = "0.9"
+image="0.25"

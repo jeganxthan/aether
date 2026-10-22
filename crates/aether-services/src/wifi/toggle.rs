@@ -31,9 +31,7 @@ impl WifiToggle {
         let enabled = self.is_enabled().await?;
         let next_state = !enabled;
 
-        self.manager
-            .set_wireless_enabled(next_state)
-            .await?;
+        self.manager.set_wireless_enabled(next_state).await?;
 
         Ok(next_state)
     }

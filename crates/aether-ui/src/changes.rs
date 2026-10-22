@@ -47,6 +47,15 @@ pub fn mark_all() {
     ping();
 }
 
+/*
+ * draws every window again on the next turn of the loop, from any thread;
+ * a background task calls this after it changed what a view shows, so a
+ * window resting on its last frame picks the change up
+ */
+pub fn refresh() {
+    mark_all();
+}
+
 // only the windows that read this service are drawn again
 pub fn mark(service: TypeId) {
     let mut changes = CHANGED.lock().unwrap_or_else(PoisonError::into_inner);

@@ -22,6 +22,7 @@ mod window;
 
 pub use animation::{Animation, Blend, Easing, request_frame};
 pub use app::App;
+pub use changes::refresh;
 pub use full::Full;
 pub use graphics::{Cap, Color, Gradient, Weight};
 pub use input::cursor_names::{
