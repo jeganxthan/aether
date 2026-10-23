@@ -32,10 +32,12 @@ Super + Shift + C   color picker
 
 Run `labwc -r` afterwards to reload the compositor config.
 
-The helpers need `grim`, `slurp`, `tesseract` and `wl-copy` on the system:
+The helpers need `grim`, `slurp`, `tesseract` and `wl-copy` on the system.
+On Void the engine is installed as `tesseract-ocr`, and the English language
+data comes from `tesseract-ocr-eng`:
 
 ```bash
-sudo xbps-install grim slurp tesseract-ocr
+sudo xbps-install grim slurp tesseract-ocr tesseract-ocr-eng wl-copy
 ```
 
 Calling `cargo run` from the keybinds is avoided on purpose: it rebuilds on

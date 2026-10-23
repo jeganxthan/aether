@@ -155,6 +155,8 @@ fn row(icon: OsdIcon, percent: u8, value: String) -> Row {
             .align_child(Align::End, Center)
             .child(
                 Text::new(value)
+                    .font("Maple Mono")
+                    .font("Maple Mono")
                     .color(theme.text)
                     .size(12.0)
                     .weight(Weight::SemiBold),

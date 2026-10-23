@@ -56,6 +56,7 @@ struct WaylandState {
 
     // keys do not say which window they are for, so the window that has focus is kept
     keyboard_focus: Option<WlSurface>,
+    control_down: bool,
 
     registry: RegistryState,
     output: OutputState,
@@ -142,6 +143,7 @@ impl WaylandApp {
             scale_factor,
 
             keyboard_focus: None,
+            control_down: false,
 
             registry: RegistryState::new(&globals),
             output: OutputState::new(&globals, &qh),

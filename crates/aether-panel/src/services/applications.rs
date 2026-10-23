@@ -1,17 +1,91 @@
 
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::env;
 use std::fs;
 use std::io;
 use std::path::{Path, PathBuf};
 use std::process::Command;
+use std::sync::{Mutex, OnceLock};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Application {
     pub id: String,
     pub name: String,
+    pub comment: Option<String>,
     pub icon: Option<String>,
     pub desktop_file: PathBuf,
+}
+
+impl Application {
+    pub fn icon_path(&self) -> Option<PathBuf> {
+        self.icon.as_deref().and_then(resolve_icon)
+    }
+}
+
+static ICON_CACHE: OnceLock<Mutex<HashMap<String, Option<PathBuf>>>> = OnceLock::new();
+
+pub fn resolve_icon(name: &str) -> Option<PathBuf> {
+    let cache = ICON_CACHE.get_or_init(|| Mutex::new(HashMap::new()));
+    if let Ok(guard) = cache.lock() {
+        if let Some(cached) = guard.get(name) {
+            return cached.clone();
+        }
+    }
+
+    let found = find_icon_on_disk(name);
+
+    if let Ok(mut guard) = cache.lock() {
+        guard.insert(name.to_string(), found.clone());
+    }
+
+    found
+}
+
+fn find_icon_on_disk(name: &str) -> Option<PathBuf> {
+    let path = Path::new(name);
+    if path.is_absolute() && path.exists() {
+        return Some(path.to_path_buf());
+    }
+
+    let clean = name
+        .strip_suffix(".png")
+        .or_else(|| name.strip_suffix(".svg"))
+        .or_else(|| name.strip_suffix(".xpm"))
+        .unwrap_or(name);
+
+    // Direct check in /usr/share/pixmaps
+    for ext in &[".png", ".svg"] {
+        let p = PathBuf::from(format!("/usr/share/pixmaps/{clean}{ext}"));
+        if p.exists() {
+            return Some(p);
+        }
+    }
+
+    // Search hicolor and system icon themes
+    let home = std::env::var("HOME").unwrap_or_default();
+    let bases = [
+        format!("{home}/.local/share/icons/hicolor"),
+        "/usr/share/icons/hicolor".to_string(),
+        "/usr/share/icons/Adwaita".to_string(),
+        "/usr/share/icons/breeze".to_string(),
+        "/usr/share/icons/Papirus".to_string(),
+    ];
+
+    let sizes = ["48x48", "scalable", "32x32", "64x64", "128x128", "256x256", "symbolic"];
+    for base in &bases {
+        for size in &sizes {
+            for sub in &["apps", "categories", "devices", "status", "ui"] {
+                for ext in &[".png", ".svg"] {
+                    let p = PathBuf::from(format!("{base}/{size}/{sub}/{clean}{ext}"));
+                    if p.exists() {
+                        return Some(p);
+                    }
+                }
+            }
+        }
+    }
+
+    None
 }
 
 #[derive(Debug, Clone, Default)]
@@ -81,9 +155,11 @@ impl ApplicationService {
                 applications.push(Application {
                     id,
                     name,
+                    comment: entry.comment.filter(|c| !c.is_empty()),
                     icon: entry.icon.filter(|icon| !icon.is_empty()),
                     desktop_file: file,
                 });
+
             }
         }
 
@@ -95,6 +171,13 @@ impl ApplicationService {
         });
 
         self.applications = applications;
+
+        for app in &self.applications {
+            if let Some(ref icon) = app.icon {
+                resolve_icon(icon);
+            }
+        }
+
         Ok(())
     }
 
@@ -102,7 +185,7 @@ impl ApplicationService {
         &self.applications
     }
 
-    /// Case-insensitive search by application name.
+    /// Case-insensitive search with relevance sorting.
     pub fn search(&self, query: &str) -> Vec<Application> {
         let query = query.trim().to_lowercase();
 
@@ -110,11 +193,47 @@ impl ApplicationService {
             return self.applications.clone();
         }
 
-        self.applications
-            .iter()
-            .filter(|app| app.name.to_lowercase().contains(&query))
-            .cloned()
-            .collect()
+        let mut scored: Vec<(u32, usize, Application)> = Vec::new();
+
+        for (orig_idx, app) in self.applications.iter().enumerate() {
+            let name_lower = app.name.to_lowercase();
+            let id_lower = app.id.to_lowercase();
+            let comment_lower = app.comment.as_deref().unwrap_or("").to_lowercase();
+
+            let score = if name_lower == query {
+                Some(0)
+            } else if name_lower.starts_with(&query) {
+                Some(10)
+            } else if name_lower
+                .split(|c: char| !c.is_alphanumeric())
+                .any(|word| word.starts_with(&query))
+            {
+                Some(20)
+            } else if name_lower.contains(&query) {
+                Some(30)
+            } else if id_lower.starts_with(&query) {
+                Some(40)
+            } else if id_lower.contains(&query) {
+                Some(50)
+            } else if comment_lower.contains(&query) {
+                Some(60)
+            } else {
+                None
+            };
+
+            if let Some(s) = score {
+                scored.push((s, orig_idx, app.clone()));
+            }
+        }
+
+        scored.sort_by(|(s1, idx1, a1), (s2, idx2, a2)| {
+            s1.cmp(s2)
+                .then_with(|| a1.name.len().cmp(&a2.name.len()))
+                .then_with(|| a1.name.cmp(&a2.name))
+                .then_with(|| idx1.cmp(idx2))
+        });
+
+        scored.into_iter().map(|(_, _, app)| app).collect()
     }
 
     /// Launch an application using its desktop entry.
@@ -149,12 +268,14 @@ impl ApplicationService {
 #[derive(Default)]
 struct DesktopEntry {
     name: Option<String>,
+    comment: Option<String>,
     icon: Option<String>,
     entry_type: Option<String>,
     try_exec: Option<String>,
     hidden: bool,
     no_display: bool,
 }
+
 
 fn application_directories() -> Vec<PathBuf> {
     let mut directories = Vec::new();
@@ -231,6 +352,7 @@ fn parse_desktop_file(path: &Path) -> io::Result<DesktopEntry> {
 
         match key {
             "Name" => entry.name = Some(value.to_string()),
+            "Comment" => entry.comment = Some(value.to_string()),
             "Icon" => entry.icon = Some(value.to_string()),
             "Type" => entry.entry_type = Some(value.to_string()),
             "TryExec" => entry.try_exec = Some(value.to_string()),
@@ -240,6 +362,7 @@ fn parse_desktop_file(path: &Path) -> io::Result<DesktopEntry> {
             }
             _ => {}
         }
+
     }
 
     Ok(entry)

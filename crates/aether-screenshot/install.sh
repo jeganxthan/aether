@@ -47,14 +47,31 @@ for entry in "${ICONS[@]}"; do
 done
 
 missing=()
-for tool in grim slurp wl-copy notify-send tesseract; do
+for tool in grim slurp wl-copy notify-send; do
     command -v "$tool" >/dev/null 2>&1 || missing+=("$tool")
 done
+
+# Void installs the engine as tesseract-ocr, while other distros use tesseract
+ocr=""
+for tool in tesseract tesseract-ocr; do
+    if command -v "$tool" >/dev/null 2>&1; then
+        ocr="$tool"
+        break
+    fi
+done
+
+if [[ -z "$ocr" ]]; then
+    missing+=("tesseract-ocr")
+elif ! "$ocr" --list-langs 2>/dev/null | grep -qx "eng"; then
+    # the engine alone ships no English data, so OCR would fail without it
+    missing+=("tesseract-ocr-eng")
+fi
 
 if ((${#missing[@]})); then
     echo
     echo "==> Missing runtime tools: ${missing[*]}"
-    echo "    sudo xbps-install grim slurp tesseract-ocr"
+    echo "    sudo xbps-install grim slurp wl-copy"
+    echo "    sudo xbps-install tesseract-ocr tesseract-ocr-eng"
 fi
 
 cat <<EOF

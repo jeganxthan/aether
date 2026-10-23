@@ -1,0 +1,609 @@
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+use std::sync::{Mutex, OnceLock};
+use std::time::{Duration, Instant};
+
+use aether::{
+    Align, Animation, Canvas, Color, Column, Cursor, Easing, Horizontal, Image, InputArea, Key, Keyboard,
+    Layer, LayerWindow, Margin, Padding, Parent, Path, Rectangle, Row, Shadow, Shape, Stack,
+    Start, Text, Vertical, Weight, children,
+};
+
+use crate::panel::svg::player_svg::{control_icon, player_brand_icon};
+use crate::panel::top::PANEL_HEIGHT;
+use crate::services::player::{next, play_pause, player, previous, seek_to};
+use crate::theme::theme;
+
+const ISLAND_WINDOW_WIDTH: f32 = 260.0;
+const ISLAND_WINDOW_HEIGHT: f32 = 44.0;
+const ISLAND_MAX_HEIGHT: f32 = 36.0;
+
+const EAR_RADIUS: f32 = 13.0;
+const CORNER_RADIUS: f32 = 14.0;
+const ISLAND_BODY_WIDTH: f32 = 200.0;
+
+// Margin from screen right edge — centers under player icon in top bar
+pub const PLAYER_EDGE_INSET_RIGHT: f32 = 4.0;
+
+const ISLAND_ANIM_DURATION: Duration = Duration::from_millis(220);
+static PROGRESS: OnceLock<Mutex<Animation<f32>>> = OnceLock::new();
+
+static HOVERED: AtomicBool = AtomicBool::new(false);
+static HOVER_GENERATION: AtomicU64 = AtomicU64::new(0);
+static HOVER_START: OnceLock<Mutex<Option<Instant>>> = OnceLock::new();
+static MENU_OPEN: AtomicBool = AtomicBool::new(false);
+static MENU_PROGRESS: OnceLock<Mutex<Animation<f32>>> = OnceLock::new();
+const MENU_ANIM_DURATION: Duration = Duration::from_millis(280);
+
+fn menu_progress() -> f32 {
+    let animation = MENU_PROGRESS.get_or_init(|| {
+        Mutex::new(Animation::new(0.0).duration(MENU_ANIM_DURATION).easing(Easing::Out))
+    });
+    let mut animation = animation.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+    animation.to(if MENU_OPEN.load(Ordering::Relaxed) { 1.0 } else { 0.0 });
+    animation.value()
+}
+
+fn hover_start_lock() -> &'static Mutex<Option<Instant>> {
+    HOVER_START.get_or_init(|| Mutex::new(None))
+}
+
+pub fn hovered() -> bool {
+    HOVERED.load(Ordering::Relaxed)
+}
+
+pub fn toggle_menu() {
+    MENU_OPEN.fetch_xor(true, Ordering::Relaxed);
+    aether::refresh();
+}
+
+pub fn close_menu() {
+    if MENU_OPEN.swap(false, Ordering::Relaxed) {
+        aether::refresh();
+    }
+}
+
+pub fn player_menu() -> LayerWindow {
+    const MENU_WIDTH: f32 = 340.0;
+    const MENU_HEIGHT: f32 = 172.0;
+    let progress = menu_progress();
+    let current_width = ISLAND_BODY_WIDTH + EAR_RADIUS * 2.0
+        + (MENU_WIDTH - ISLAND_BODY_WIDTH - EAR_RADIUS * 2.0) * progress;
+    let current_height = ISLAND_MAX_HEIGHT + (MENU_HEIGHT - ISLAND_MAX_HEIGHT) * progress;
+    let current_corner_radius = CORNER_RADIUS.min(current_height * 0.44);
+    let window = LayerWindow::new()
+        .width(aether::Full)
+        .height(aether::Full)
+        .anchor_vertical(Vertical::Top)
+        .anchor_horizontal(Horizontal::Right)
+        .layer(Layer::Overlay)
+        .space(aether::Zone::Ignore)
+        .namespace("aether-player-menu")
+        .keyboard(Keyboard::OnDemand)
+        .on_key(|key| if key == Key::Escape { close_menu(); });
+
+    if progress <= 0.001 && !MENU_OPEN.load(Ordering::Relaxed) {
+        return window.click_through().child(blank());
+    }
+    let Some(state) = player() else {
+        return window.click_through().child(blank());
+    };
+
+    let theme = theme();
+    let duration = state.metadata.length_secs.unwrap_or(0);
+    let position = state.position_secs.min(duration);
+    let fraction = if duration > 0 { position as f32 / duration as f32 } else { 0.0 };
+    let mut cover = Rectangle::new().width(60.0).height(60.0).radius(8.0).fill(Color::rgba(35, 35, 35, 255)).clip();
+    if let Some(path) = state.local_art_path() { cover = cover.fill(Image::cover(path)); }
+
+    let title = if state.metadata.title.is_empty() { "Playing Media".to_string() } else { state.metadata.title.clone() };
+    let subtitle = [state.metadata.artist.as_str(), state.metadata.album.as_str()]
+        .into_iter().filter(|part| !part.is_empty()).collect::<Vec<_>>().join(" · ");
+    let controls = Row::new(children![
+        menu_button("|◀", move |_| previous()),
+        menu_button(if state.is_playing { "Ⅱ" } else { "▶" }, move |_| play_pause()),
+        menu_button("▶|", move |_| next()),
+    ]).gap(8.0).align(Align::Center);
+    let progress_bar = Rectangle::new()
+        .width(210.0).height(6.0).radius(3.0)
+        .fill(Color::rgba(75, 75, 75, 255))
+        .cursor(Cursor::Pointer)
+        .on_drag(move |point| {
+            if duration > 0 {
+                seek_to(((point.x / 210.0).clamp(0.0, 1.0) * duration as f32).round() as u64);
+            }
+        })
+        .child(Rectangle::new()
+            .width((210.0 * fraction).max(3.0)).height(6.0).radius(3.0)
+            .fill(Color::rgba(30, 215, 96, 255)));
+
+    let menu_background = Canvas::new()
+        .width(current_width)
+        .height(current_height)
+        .shapes(vec![
+            Box::new(build_island_path(current_width, current_height, EAR_RADIUS, current_corner_radius).fill(theme.bar).opacity(progress)) as Box<dyn Shape>,
+            Box::new(build_island_border_path(current_width, current_height, EAR_RADIUS, current_corner_radius).stroke(1.0, theme.surface_border).opacity(progress)) as Box<dyn Shape>,
+        ]);
+    let card = Rectangle::new().width(current_width).height(current_height)
+        .fill(Color::TRANSPARENT).clip()
+        .child(Stack::new(children![
+          Rectangle::new().width(current_width).height(current_height).fill(Color::TRANSPARENT)
+            .padding(Padding { top: 0.0, right: EAR_RADIUS, bottom: 0.0, left: EAR_RADIUS })
+            .align_child(Align::Center, Align::Start)
+            .child(Rectangle::new().width(current_width - 2.0 * EAR_RADIUS).height(current_height)
+                .fill(Color::TRANSPARENT)
+                .shadow(Shadow::drop(theme.shadow).opacity(0.45 * progress).blur(22.0).offset(0.0, 8.0))),
+          menu_background,
+          Rectangle::new().width(current_width).height(current_height).fill(Color::TRANSPARENT)
+        .opacity(((progress - 0.18) / 0.82).clamp(0.0, 1.0))
+        .padding(Padding { top: 14.0, right: EAR_RADIUS + 14.0, bottom: 8.0, left: EAR_RADIUS + 14.0 })
+        .child(Column::new(children![
+            Row::new(children![cover, Column::new(children![
+                Text::new(title).font("Maple Mono").color(theme.text).size(13.0).weight(Weight::SemiBold).elide(),
+                Text::new(if subtitle.is_empty() { format!("{:?}", state.brand) } else { subtitle }).font("Maple Mono").color(theme.text_muted).size(10.0).elide(),
+            ]).width(Parent).gap(7.0).align(Align::Start)]).gap(16.0).align(Align::Center),
+            Row::new(children![
+                Text::new(format_time(position)).font("Maple Mono").color(theme.text_muted).size(10.0),
+                Rectangle::new().width(Parent).height(1.0).fill(Color::TRANSPARENT),
+                progress_bar,
+                Rectangle::new().width(Parent).height(1.0).fill(Color::TRANSPARENT),
+                Text::new(format_time(duration)).font("Maple Mono").color(theme.text_muted).size(10.0),
+            ]).gap(6.0).align(Align::Center),
+            Row::new(children![Rectangle::new().width(Parent).height(1.0).fill(Color::TRANSPARENT), controls, Rectangle::new().width(Parent).height(1.0).fill(Color::TRANSPARENT)]).align(Align::Center),
+        ]).width(Parent).height(Parent).gap(10.0).align(Align::Start))]));
+
+    window.child(
+        Rectangle::new()
+            .width(Parent)
+            .height(Parent)
+            .fill(Color::TRANSPARENT)
+            .on_click(|_| close_menu())
+            .child(
+                Rectangle::new()
+                    .width(Parent)
+                    .height(Parent)
+                    .fill(Color::TRANSPARENT)
+                    .padding(Padding {
+                        top: PANEL_HEIGHT,
+                        right: PLAYER_EDGE_INSET_RIGHT,
+                        bottom: 0.0,
+                        left: 0.0,
+                    })
+                    .align_child(Align::End, Align::Start)
+                    .child(card.on_click(|_| {})),
+            ),
+    )
+}
+
+fn menu_button(label: &str, action: impl Fn(aether::Button) + 'static) -> Rectangle {
+    Rectangle::new().width(32.0).height(32.0).radius(16.0)
+        .fill(Color::rgba(38, 38, 38, 255)).cursor(Cursor::Pointer)
+        .align_child(Align::Center, Align::Center).on_click(action)
+        .child(Text::new(label).font("Maple Mono").color(theme().text).size(14.0))
+}
+
+fn format_time(seconds: u64) -> String { format!("{}:{:02}", seconds / 60, seconds % 60) }
+
+pub fn set_hovered(is_hov: bool) {
+    let generation = HOVER_GENERATION.fetch_add(1, Ordering::Relaxed) + 1;
+
+    if is_hov {
+        HOVERED.store(true, Ordering::Relaxed);
+        if let Ok(mut start) = hover_start_lock().lock() {
+            if start.is_none() {
+                *start = Some(Instant::now());
+            }
+        }
+        aether::refresh();
+        return;
+    }
+
+    #[cfg(test)]
+    {
+        let _ = generation;
+        HOVERED.store(false, Ordering::Relaxed);
+        if let Ok(mut start) = hover_start_lock().lock() {
+            *start = None;
+        }
+        aether::refresh();
+    }
+
+    #[cfg(not(test))]
+    {
+        crate::services::runtime::runtime().spawn(async move {
+            tokio::time::sleep(Duration::from_millis(250)).await;
+
+            if HOVER_GENERATION.load(Ordering::Relaxed) == generation {
+                HOVERED.store(false, Ordering::Relaxed);
+                if let Ok(mut start) = hover_start_lock().lock() {
+                    *start = None;
+                }
+                aether::refresh();
+            }
+        });
+    }
+}
+
+fn island_progress(expanded: bool) -> f32 {
+    let animation = PROGRESS.get_or_init(|| {
+        Mutex::new(Animation::new(0.0).duration(ISLAND_ANIM_DURATION).easing(Easing::Out))
+    });
+
+    let mut anim = animation.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+    anim.to(if expanded { 1.0 } else { 0.0 });
+    anim.value()
+}
+
+fn build_island_path(w: f32, h: f32, r_e: f32, r_b: f32) -> Path {
+    let k_e = 0.55228475 * r_e;
+    let k_b = 0.55228475 * r_b;
+
+    Path::new()
+        .move_to(0.0, 0.0)
+        .cubic_to(k_e, 0.0, r_e, r_e - k_e, r_e, r_e)
+        .line_to(r_e, h - r_b)
+        .cubic_to(r_e, h - r_b + k_b, r_e + r_b - k_b, h, r_e + r_b, h)
+        .line_to(w - r_e - r_b, h)
+        .cubic_to(w - r_e - r_b + k_b, h, w - r_e, h - r_b + k_b, w - r_e, h - r_b)
+        .line_to(w - r_e, r_e)
+        .cubic_to(w - r_e, r_e - k_e, w - k_e, 0.0, w, 0.0)
+        .line_to(0.0, 0.0)
+        .close()
+}
+
+fn build_island_border_path(w: f32, h: f32, r_e: f32, r_b: f32) -> Path {
+    let k_e = 0.55228475 * r_e;
+    let k_b = 0.55228475 * r_b;
+
+    Path::new()
+        .move_to(0.0, 0.0)
+        .cubic_to(k_e, 0.0, r_e, r_e - k_e, r_e, r_e)
+        .line_to(r_e, h - r_b)
+        .cubic_to(r_e, h - r_b + k_b, r_e + r_b - k_b, h, r_e + r_b, h)
+        .line_to(w - r_e - r_b, h)
+        .cubic_to(w - r_e - r_b + k_b, h, w - r_e, h - r_b + k_b, w - r_e, h - r_b)
+        .line_to(w - r_e, r_e)
+        .cubic_to(w - r_e, r_e - k_e, w - k_e, 0.0, w, 0.0)
+}
+
+pub fn player_popup() -> LayerWindow {
+    let active_player = player();
+    let has_player = active_player.is_some();
+    let is_hovered = (hovered() || MENU_OPEN.load(Ordering::Relaxed)) && has_player;
+    let progress = island_progress(is_hovered);
+
+    if progress <= 0.001 && !is_hovered {
+        return LayerWindow::new()
+            .width(ISLAND_WINDOW_WIDTH)
+            .height(ISLAND_WINDOW_HEIGHT)
+            .anchor_vertical(Vertical::Top)
+            .anchor_horizontal(Horizontal::Right)
+            .layer(Layer::Top)
+            .space(aether::Zone::Ignore)
+            .namespace("aether-player-popup")
+            .margin(Margin {
+                top: PANEL_HEIGHT as i32,
+                right: PLAYER_EDGE_INSET_RIGHT as i32,
+                bottom: 0,
+                left: 0,
+            })
+            .click_through()
+            .child(blank());
+    }
+
+    let Some(current_state) = active_player else {
+        return LayerWindow::new()
+            .width(ISLAND_WINDOW_WIDTH)
+            .height(ISLAND_WINDOW_HEIGHT)
+            .anchor_vertical(Vertical::Top)
+            .anchor_horizontal(Horizontal::Right)
+            .layer(Layer::Top)
+            .space(aether::Zone::Ignore)
+            .namespace("aether-player-popup")
+            .click_through()
+            .child(blank());
+    };
+
+    let theme = theme();
+    let body_width = ISLAND_BODY_WIDTH;
+    let total_w = body_width + 2.0 * EAR_RADIUS;
+    let total_h = ISLAND_MAX_HEIGHT;
+
+    let current_h = (total_h * progress).round().max(2.0);
+    let current_r_e = EAR_RADIUS * progress;
+    let current_r_b = (CORNER_RADIUS * progress).min(current_h * 0.44);
+
+    let fill_shape = Box::new(
+        build_island_path(total_w, current_h, current_r_e, current_r_b)
+            .fill(theme.bar)
+            .opacity(progress),
+    ) as Box<dyn Shape>;
+
+    let border_shape = Box::new(
+        build_island_border_path(total_w, current_h, current_r_e, current_r_b)
+            .stroke(1.0, theme.surface_border)
+            .opacity(progress),
+    ) as Box<dyn Shape>;
+
+    let canvas = Canvas::new()
+        .width(total_w)
+        .height(current_h)
+        .shapes(vec![fill_shape, border_shape]);
+
+    let content_opacity = ((progress - 0.20) / 0.80).clamp(0.0, 1.0);
+
+    // Timing check for controls vs running title
+    let hover_duration = hover_start_lock()
+        .lock()
+        .ok()
+        .and_then(|guard| guard.map(|s| s.elapsed()))
+        .unwrap_or(Duration::ZERO);
+
+    let show_running_title = hover_duration >= Duration::from_secs(3);
+
+    // Continuous frames while animating or running marquee text
+    if is_hovered {
+        crate::services::runtime::runtime().spawn(async {
+            tokio::time::sleep(Duration::from_millis(30)).await;
+            if hovered() {
+                aether::refresh();
+            }
+        });
+    }
+
+    // Left album art thumbnail
+    let album_art_tile = {
+        let art_size = 24.0;
+        let mut tile = Rectangle::new()
+            .width(art_size)
+            .height(art_size)
+            .radius(5.0)
+            .cursor(Cursor::Pointer)
+            .on_hover(set_hovered)
+            .on_click(|_| {
+                if let Ok(mut start) = hover_start_lock().lock() {
+                    *start = Some(Instant::now());
+                }
+                play_pause();
+            })
+            .clip();
+
+        if let Some(path) = current_state.local_art_path() {
+            tile = tile.fill(Image::cover(path));
+        } else {
+            tile = tile
+                .fill(Color::rgba(40, 40, 40, 255))
+                .align_child(Align::Center, Align::Center)
+                .child(
+                    Rectangle::new()
+                        .width(14.0)
+                        .height(14.0)
+                        .fill(player_brand_icon(current_state.brand)),
+                );
+        }
+        tile
+    };
+
+    let inner_content: Row = if show_running_title {
+        // Horizontal running title (Marquee)
+        let display_title = current_state.display_title();
+        let elapsed_secs = (hover_duration.as_millis() as f32 - 3000.0).max(0.0) / 1000.0;
+        let scroll_distance = (elapsed_secs * 42.0) % 320.0;
+        let marquee_width = body_width - 34.0;
+
+        Row::new(children![
+            album_art_tile,
+            Rectangle::new()
+                .width(marquee_width)
+                .height(current_h)
+                .fill(Color::TRANSPARENT)
+                .clip()
+                .cursor(Cursor::Pointer)
+                .on_hover(set_hovered)
+                .on_click(|_| {
+                    // Clicking running title resets timer to show controls again for 3s
+                    if let Ok(mut start) = hover_start_lock().lock() {
+                        *start = Some(Instant::now());
+                    }
+                    aether::refresh();
+                })
+                .align_child(Align::Start, Align::Center)
+                .child(
+                    Rectangle::new()
+                        .width(420.0)
+                        .height(current_h)
+                        .fill(Color::TRANSPARENT)
+                        .translate(-scroll_distance, 0.0)
+                        .align_child(Align::Start, Align::Center)
+                        .child(
+                            Text::new(format!("{}         {}", display_title, display_title))
+                                .font("Maple Mono")
+                                .color(theme.text)
+                                .size(11.5)
+                                .weight(Weight::Medium)
+                        )
+                ),
+        ])
+        .width(Parent)
+        .height(current_h)
+        .gap(6.0)
+        .align(Align::Center)
+        .justify(Start)
+    } else {
+        // Controls mode: Prev, Play/Pause, Next + Time
+        let is_playing = current_state.is_playing;
+        let time_str = current_state.time_display();
+
+        let prev_btn = Rectangle::new()
+            .width(20.0)
+            .height(20.0)
+            .fill(Color::TRANSPARENT)
+            .cursor(Cursor::Pointer)
+            .align_child(Align::Center, Align::Center)
+            .on_hover(set_hovered)
+            .on_click(|_| previous())
+            .child(
+                Rectangle::new()
+                    .width(13.0)
+                    .height(13.0)
+                    .fill(control_icon("prev")),
+            );
+
+        let play_btn = Rectangle::new()
+            .width(22.0)
+            .height(22.0)
+            .radius(11.0)
+            .fill(Color::rgba(30, 215, 96, 255)) // Spotify green accent
+            .cursor(Cursor::Pointer)
+            .align_child(Align::Center, Align::Center)
+            .on_hover(set_hovered)
+            .on_click(|_| play_pause())
+            .child(
+                Rectangle::new()
+                    .width(11.0)
+                    .height(11.0)
+                    .fill(if is_playing {
+                        control_icon("pause")
+                    } else {
+                        control_icon("play")
+                    }),
+            );
+
+        let next_btn = Rectangle::new()
+            .width(20.0)
+            .height(20.0)
+            .fill(Color::TRANSPARENT)
+            .cursor(Cursor::Pointer)
+            .align_child(Align::Center, Align::Center)
+            .on_hover(set_hovered)
+            .on_click(|_| next())
+            .child(
+                Rectangle::new()
+                    .width(13.0)
+                    .height(13.0)
+                    .fill(control_icon("next")),
+            );
+
+        let time_badge = Text::new(time_str)
+            .font("Maple Mono")
+            .color(theme.text_muted)
+            .size(11.0)
+            .weight(Weight::Medium);
+
+        Row::new(children![
+            album_art_tile,
+            Row::new(children![prev_btn, play_btn, next_btn])
+                .gap(5.0)
+                .align(Align::Center),
+            Rectangle::new()
+                .width(Parent)
+                .height(1.0)
+                .fill(Color::TRANSPARENT),
+            time_badge,
+        ])
+        .width(Parent)
+        .height(current_h)
+        .gap(6.0)
+        .align(Align::Center)
+        .justify(Start)
+    };
+
+    let island = Rectangle::new()
+        .width(total_w)
+        .height(current_h)
+        .fill(Color::TRANSPARENT)
+        .cursor(Cursor::Pointer)
+        .on_hover(set_hovered)
+        .child(Stack::new(children![
+            // Soft, refined ambient shadow strictly beneath the body (no leakage into bar)
+            Rectangle::new()
+                .width(total_w)
+                .height(current_h)
+                .fill(Color::TRANSPARENT)
+                .padding(Padding {
+                    top: 2.0,
+                    right: current_r_e,
+                    bottom: 0.0,
+                    left: current_r_e,
+                })
+                .align_child(Align::Center, Align::Start)
+                .child(
+                    Rectangle::new()
+                        .width(body_width)
+                        .height((current_h - 2.0).max(1.0))
+                        .radius_bottom_left(current_r_b)
+                        .radius_bottom_right(current_r_b)
+                        .fill(theme.bar)
+                        .shadow(
+                            Shadow::drop(Color::rgba(0, 0, 0, 140))
+                                .opacity(0.20 * progress)
+                                .blur(8.0)
+                                .offset(0.0, 2.5),
+                        ),
+                ),
+            canvas,
+            // Content padded within the ears
+            Rectangle::new()
+                .width(total_w)
+                .height(current_h)
+                .fill(Color::TRANSPARENT)
+                .opacity(content_opacity)
+                .padding(Padding {
+                    top: 3.0,
+                    right: EAR_RADIUS + 7.0,
+                    bottom: 3.0,
+                    left: EAR_RADIUS + 7.0,
+                })
+                .align_child(Align::Center, Align::Center)
+                .child(inner_content),
+        ]));
+
+    let island_x = (ISLAND_WINDOW_WIDTH - total_w).max(0.0).round() as i32;
+    let island_y = 0;
+    let island_w = total_w.round() as i32;
+    let island_h = current_h.round() as i32;
+
+    let input = InputArea {
+        x: island_x,
+        y: island_y,
+        width: island_w,
+        height: island_h,
+    };
+
+    let mut window = LayerWindow::new()
+        .width(ISLAND_WINDOW_WIDTH)
+        .height(ISLAND_WINDOW_HEIGHT)
+        .anchor_vertical(Vertical::Top)
+        .anchor_horizontal(Horizontal::Right)
+        .layer(Layer::Top)
+        .space(aether::Zone::Ignore)
+        .namespace("aether-player-popup")
+        .margin(Margin {
+            top: PANEL_HEIGHT as i32,
+            right: PLAYER_EDGE_INSET_RIGHT as i32,
+            bottom: 0,
+            left: 0,
+        });
+
+    if progress > 0.05 {
+        window = window.input_region(vec![input]);
+    } else {
+        window = window.click_through();
+    }
+
+    window.child(
+        Rectangle::new()
+            .width(Parent)
+            .height(Parent)
+            .fill(Color::TRANSPARENT)
+            .on_hover(set_hovered)
+            .align_child(Align::End, Align::Start)
+            .child(island),
+    )
+}
+
+fn blank() -> Rectangle {
+    Rectangle::new()
+        .width(Parent)
+        .height(Parent)
+        .fill(Color::TRANSPARENT)
+}

@@ -2,12 +2,13 @@ use std::sync::{OnceLock, RwLock};
 use std::time::Duration;
 
 use aether::refresh as wake;
-use aether_services::battery::{BatteryInfo, BatteryService};
+use aether_services::battery::{BatteryInfo, BatteryService, info::Battery};
 
 use super::runtime::runtime;
 
 // the latest reading, kept where the sync view can read it without touching sysfs
 static LATEST: OnceLock<RwLock<Option<BatteryInfo>>> = OnceLock::new();
+static DETAILS: OnceLock<RwLock<Option<Battery>>> = OnceLock::new();
 
 // starts the refresh task exactly once, after LATEST exists
 static STARTED: OnceLock<()> = OnceLock::new();
@@ -19,12 +20,21 @@ static STARTED: OnceLock<()> = OnceLock::new();
  */
 pub fn battery() -> Option<BatteryInfo> {
     let latest = LATEST.get_or_init(|| RwLock::new(None));
+    DETAILS.get_or_init(|| RwLock::new(None));
 
     STARTED.get_or_init(|| {
         runtime().spawn(refresh());
     });
 
     latest.read().ok().and_then(|battery| *battery)
+}
+
+pub fn battery_details() -> Option<Battery> {
+    let _ = battery();
+
+    DETAILS
+        .get()
+        .and_then(|details| details.read().ok().and_then(|details| details.clone()))
 }
 
 async fn refresh() {
@@ -39,21 +49,36 @@ async fn refresh() {
         ticker.tick().await;
 
         let reading = service.current().ok();
+        let details = aether_services::battery::info::battery();
 
         let Some(latest) = LATEST.get() else {
             continue;
         };
 
-        let Ok(mut latest) = latest.write() else {
+        let Ok(mut current) = latest.write() else {
             continue;
         };
 
-        // only a real change wakes the panel to redraw
-        if *latest != reading {
-            *latest = reading;
+        let reading_changed = *current != reading;
+        if reading_changed {
+            *current = reading;
+        }
 
-            drop(latest);
+        let details_changed = DETAILS.get().is_some_and(|cache| {
+            let Ok(mut current) = cache.write() else {
+                return false;
+            };
 
+            let changed = *current != details;
+            if changed {
+                *current = details;
+            }
+            changed
+        });
+
+        drop(current);
+
+        if reading_changed || details_changed {
             wake();
         }
     }

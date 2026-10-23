@@ -18,3 +18,5 @@ mod clock;
 
 pub use wifi::{WifiToggle, WifiScanner, WifiConnection, ConnectedWifiService, ConnectedWifiSignal};
 pub use clock::ClockService;
+pub mod player;
+pub use player::{PlayerService, PlayerState, PlayerBrand, PlayerMetadata};

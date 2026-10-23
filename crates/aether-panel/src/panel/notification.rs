@@ -3,7 +3,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use aether::{
     Align, Center, Color, Column, Cursor, Horizontal, Image, InputArea, Layer, LayerWindow, Margin,
-    Parent, Radius, Rectangle, Row, Shadow, Start, Text, Vertical, Weight, Widget, Zone, children,
+    Parent, Radius, Rectangle, Row, Start, Text, Vertical, Weight, Widget, Zone, children,
 };
 
 use aether_services::notifications::Notification;
@@ -12,17 +12,16 @@ use crate::panel::svg::recolor::ink_image;
 use crate::services::notifications::{
     MAX_VISIBLE, VisiblePopup, dismiss, set_card_hovered, set_close_hovered, set_hovered, visible,
 };
-use crate::theme::{mix, theme};
 
 // the popup card size and the space between two of them
 fn premium_text(value: impl Into<String>) -> Text {
-    Text::new(value).font("Cantarell")
+    Text::new(value).font("Adwaita Sans")
 }
 
 const CARD_WIDTH: f32 = 372.0;
 const CARD_HEIGHT: f32 = 84.0;
-const CARD_GAP: f32 = 10.0;
-const CARD_RADIUS: f32 = 14.0;
+const CARD_GAP: f32 = 8.0;
+const CARD_RADIUS: f32 = 0.0;
 const CARD_PADDING: f32 = 13.0;
 
 // the distance kept from the screen edges (positioned right under the top panel)
@@ -34,10 +33,19 @@ const EMPTY_HEIGHT: f32 = 1.0;
 
 // the avatar in front of the text, and the close button beside it
 const AVATAR_SIZE: f32 = 40.0;
-const CLOSE_SIZE: f32 = 26.0;
+const CLOSE_SIZE: f32 = 30.0;
 
 // the space between the avatar, the text and the close button
 const COLUMN_GAP: f32 = 12.0;
+
+const CARD_COLOR: Color = Color::rgba(24, 25, 31, 200);
+const CARD_HOVER_COLOR: Color = Color::rgba(41, 43, 53, 200);
+const CARD_BORDER: Color = Color::rgba(255, 255, 255, 26);
+const AVATAR_COLOR: Color = Color::rgba(255, 255, 255, 18);
+const TEXT_COLOR: Color = Color::rgb(235, 237, 245);
+const MUTED_TEXT_COLOR: Color = Color::rgba(235, 237, 245, 158);
+const FAINT_TEXT_COLOR: Color = Color::rgba(235, 237, 245, 97);
+const CLOSE_HOVER_COLOR: Color = Color::rgba(41, 43, 53, 230);
 
 /*
  * The popups glide in smoothly from the right edge with a cubic ease-out curve,
@@ -140,21 +148,14 @@ fn card(popup: &VisiblePopup) -> Rectangle {
     let scale = card_scale(visual);
     let slide_x = visual * CARD_WIDTH;
     let id = popup.id;
-    let theme = theme();
 
     // hovering any card holds the whole stack open; clicking one dismisses it
     Rectangle::new()
         .width(CARD_WIDTH)
         .height(CARD_HEIGHT)
-        .fill(mix(theme.surface, theme.surface_hi, popup.hover))
-        .border(1.0, theme.surface_border)
+        .fill(mix_color(CARD_COLOR, CARD_HOVER_COLOR, popup.hover))
+        .border(1.0, CARD_BORDER)
         .radius(CARD_RADIUS)
-        .shadow(
-            Shadow::drop(theme.shadow)
-                .opacity(0.38)
-                .blur(18.0)
-                .offset(0.0, 6.0),
-        )
         // smooth physics-based motion: eased slide, opacity fade, and micro-scale pop
         .opacity(opacity)
         .scale(scale)
@@ -178,6 +179,20 @@ fn card(popup: &VisiblePopup) -> Rectangle {
             .gap(COLUMN_GAP)
             .align(Align::Center),
         )
+}
+
+fn mix_color(from: Color, to: Color, amount: f32) -> Color {
+    let amount = amount.clamp(0.0, 1.0);
+    let blend = |start: u8, end: u8| {
+        (f32::from(start) + (f32::from(end) - f32::from(start)) * amount).round() as u8
+    };
+
+    Color::rgba(
+        blend(from.red(), to.red()),
+        blend(from.green(), to.green()),
+        blend(from.blue(), to.blue()),
+        blend(from.alpha(), to.alpha()),
+    )
 }
 
 // path to the bundled SVG notification icon
@@ -236,19 +251,16 @@ fn avatar(notification: &Notification) -> Rectangle {
             return Rectangle::new()
                 .width(AVATAR_SIZE)
                 .height(AVATAR_SIZE)
-                .radius(Radius::Fixed(10.0))
+                .radius(Radius::Fixed(0.0))
                 .fill(Image::cover(path))
                 .clip();
         }
 
-        let theme = theme();
-
         return Rectangle::new()
             .width(AVATAR_SIZE)
             .height(AVATAR_SIZE)
-            .radius(Radius::Fixed(10.0))
-            .fill(theme.chip)
-            .border(1.0, theme.chip_border)
+            .radius(Radius::Fixed(0.0))
+            .fill(AVATAR_COLOR)
             .padding(7.0)
             .align_child(Center, Center)
             .child(
@@ -259,46 +271,44 @@ fn avatar(notification: &Notification) -> Rectangle {
             );
     }
 
-    // fallback: a sleek rounded glass badge with the crisp symbolic notification bell
+    // fallback: a square badge with the symbolic notification bell
     let fallback = fallback_icon_path();
-    let theme = theme();
 
     Rectangle::new()
         .width(AVATAR_SIZE)
         .height(AVATAR_SIZE)
-        .radius(Radius::Fixed(10.0))
-        .fill(theme.chip)
-        .border(1.0, theme.chip_border)
+        .radius(Radius::Fixed(0.0))
+        .fill(AVATAR_COLOR)
         .align_child(Center, Center)
         .child(
             Rectangle::new()
                 .width(20.0)
                 .height(20.0)
-                .fill(ink_image(fallback, theme.icon)),
+                .fill(ink_image(fallback, TEXT_COLOR)),
         )
 }
 
-// the round button that sends the notification away
+// the square button that sends the notification away
 fn close_button(id: u32, hover: f32) -> Rectangle {
-    let theme = theme();
-
     Rectangle::new()
         .width(CLOSE_SIZE)
         .height(CLOSE_SIZE)
-        .radius(Radius::Fixed(9.0))
-        .fill(mix(theme.chip, theme.surface_hi, hover))
-        .border(1.0, theme.chip_border)
+        .radius(Radius::Fixed(0.0))
+        .fill(Color::rgba(
+            CLOSE_HOVER_COLOR.red(),
+            CLOSE_HOVER_COLOR.green(),
+            CLOSE_HOVER_COLOR.blue(),
+            (f32::from(CLOSE_HOVER_COLOR.alpha()) * hover.clamp(0.0, 1.0)).round() as u8,
+        ))
         .cursor(Cursor::Pointer)
         .align_child(Center, Center)
         .on_hover(move |inside| set_close_hovered(id, inside))
         .on_click(move |_| dismiss(id))
-        .child(premium_text("✕").color(theme.text_faint).size(11.0).tight())
+        .child(premium_text("✕").color(FAINT_TEXT_COLOR).size(11.0).tight())
 }
 
 // the name of the sender and how long ago it spoke, the headline and the text
 fn text_column(notification: &Notification) -> Column {
-    let theme = theme();
-
     let name = if notification.app_name.trim().is_empty() {
         "Notification"
     } else {
@@ -307,7 +317,7 @@ fn text_column(notification: &Notification) -> Column {
 
     let head = Row::new(children![
         premium_text(name.to_uppercase())
-            .color(theme.text_faint)
+            .color(FAINT_TEXT_COLOR)
             .size(10.0)
             .weight(Weight::SemiBold)
             .elide(),
@@ -317,20 +327,20 @@ fn text_column(notification: &Notification) -> Column {
             .height(1.0)
             .fill(Color::TRANSPARENT),
         premium_text(ago(notification.created_at))
-            .color(theme.text_faint)
+            .color(FAINT_TEXT_COLOR)
             .size(10.5),
     ])
     .width(Parent)
     .align(Align::Center);
 
     let summary = premium_text(strip_markup(&notification.summary))
-        .color(theme.text)
+        .color(TEXT_COLOR)
         .size(12.5)
         .weight(Weight::Bold)
         .elide();
 
     let body = premium_text(strip_markup(&notification.body))
-        .color(theme.text_muted)
+        .color(MUTED_TEXT_COLOR)
         .size(11.5)
         .wrap()
         .max_lines(2);

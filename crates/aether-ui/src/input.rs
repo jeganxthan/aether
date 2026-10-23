@@ -29,6 +29,9 @@ pub enum Key {
 
     Backspace,
 
+    // erase the word immediately before the cursor
+    ControlBackspace,
+
     Space,
 
     Up,

@@ -16,6 +16,7 @@ impl Field {
             Key::Character(letter) => self.insert(letter),
             Key::Space => self.insert(' '),
             Key::Backspace => self.erase(),
+            Key::ControlBackspace => self.erase_word(),
             Key::Left => self.move_to(self.cursor.saturating_sub(1)),
             Key::Right => self.move_to(self.cursor + 1),
             Key::Home => self.move_to(0),
@@ -49,6 +50,19 @@ impl Field {
 
         self.text.remove(at);
 
+        true
+    }
+
+    fn erase_word(&mut self) -> bool {
+        if self.cursor == 0 { return false; }
+        let chars: Vec<char> = self.text.chars().collect();
+        let mut start = self.cursor;
+        while start > 0 && chars[start - 1].is_whitespace() { start -= 1; }
+        while start > 0 && !chars[start - 1].is_whitespace() { start -= 1; }
+        let from = chars.iter().take(start).collect::<String>().len();
+        let to = chars.iter().take(self.cursor).collect::<String>().len();
+        self.text.replace_range(from..to, "");
+        self.cursor = start;
         true
     }
 

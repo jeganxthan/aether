@@ -30,7 +30,7 @@ use crate::theme::theme;
 
 // the height of both parts, and the padding that frames the name
 fn premium_text(value: impl Into<String>) -> Text {
-    Text::new(value).font("Noto Sans")
+    Text::new(value).font("Maple Mono")
 }
 
 #[allow(dead_code)]
@@ -243,6 +243,10 @@ const ELEMENT_GAP: f32 = 6.0;
 // the dynamic island expansion progress animation
 static PROGRESS: OnceLock<Mutex<Animation<f32>>> = OnceLock::new();
 
+// the menu open/close animation, separate from the hover hint
+const MENU_ANIM_DURATION: Duration = Duration::from_millis(280);
+static MENU_PROGRESS: OnceLock<Mutex<Animation<f32>>> = OnceLock::new();
+
 fn island_progress(expanded: bool) -> f32 {
     let animation = PROGRESS.get_or_init(|| {
         Mutex::new(Animation::new(0.0).duration(ISLAND_ANIM_DURATION).easing(Easing::Out))
@@ -250,6 +254,16 @@ fn island_progress(expanded: bool) -> f32 {
 
     let mut animation = animation.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
     animation.to(if expanded { 1.0 } else { 0.0 });
+    animation.value()
+}
+
+fn menu_progress() -> f32 {
+    let animation = MENU_PROGRESS.get_or_init(|| {
+        Mutex::new(Animation::new(0.0).duration(MENU_ANIM_DURATION).easing(Easing::Out))
+    });
+
+    let mut animation = animation.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+    animation.to(if open() { 1.0 } else { 0.0 });
     animation.value()
 }
 
@@ -310,7 +324,10 @@ fn build_island_border_path(w: f32, h: f32, r_e: f32, r_b: f32) -> Path {
  * network name, signal icon, and connection status or link speed.
  */
 pub fn wifi_hint() -> LayerWindow {
-    let expanded = hovered() && !open();
+    // stay open while the menu is moving, so the menu can grow out of the
+    // hovered island and shrink back into it instead of replacing it abruptly
+    let menu = menu_progress();
+    let expanded = hovered() || open() || menu > 0.001;
     let progress = island_progress(expanded);
 
     if progress <= 0.001 && !expanded {
@@ -351,25 +368,9 @@ pub fn wifi_hint() -> LayerWindow {
         wifi_icon.image(wifi_secured)
     };
 
-    let speed_opt = speed_text();
-    let (secondary_text, secondary_color) = if let Some(ref speed) = speed_opt {
-        (speed.clone(), theme.text_muted)
-    } else if ethernet || signal.is_some() {
-        ("Connected".to_string(), Color::rgba(74, 222, 128, 230))
-    } else {
-        ("Disconnected".to_string(), theme.text_faint)
-    };
+    let (secondary_text, secondary_color) = connection_status();
 
-    let measure_name = premium_text(&name).size(12.0).weight(Weight::SemiBold);
-    let measure_dot = premium_text("•").size(9.0);
-    let measure_sec = premium_text(&secondary_text).size(11.0).weight(Weight::Regular);
-
-    let name_w = measured_width(&measure_name);
-    let dot_w = measured_width(&measure_dot);
-    let sec_w = measured_width(&measure_sec);
-
-    let content_w = ICON_BADGE_SIZE + BADGE_GAP + name_w + ELEMENT_GAP + dot_w + ELEMENT_GAP + sec_w;
-    let target_body_w = (content_w + INNER_PADDING * 2.0).clamp(ISLAND_MIN_BODY_WIDTH, ISLAND_MAX_BODY_WIDTH);
+    let target_body_w = hint_body_width(&name, &secondary_text);
 
     let current_h = (ISLAND_MAX_HEIGHT * progress).round().max(2.0);
     let current_body_w = (target_body_w * (0.75 + 0.25 * progress)).round();
@@ -540,6 +541,43 @@ pub fn wifi_hint() -> LayerWindow {
     window.child(root)
 }
 
+// the speed, connection state, or disconnected note the hint trails after the name
+fn connection_status() -> (String, Color) {
+    if let Some(speed) = speed_text() {
+        return (speed, theme().text_muted);
+    }
+
+    if ethernet_connected() || wifi().is_some() {
+        return (
+            "Connected".to_string(),
+            Color::rgba(74, 222, 128, 230),
+        );
+    }
+
+    ("Disconnected".to_string(), theme().text_faint)
+}
+
+/*
+ * The body width of the fully expanded hint. The menu reads it too, so opening
+ * can start from the same shape the pointer is already hovering.
+ */
+fn hint_body_width(name: &str, secondary: &str) -> f32 {
+    let name = premium_text(name).size(12.0).weight(Weight::SemiBold);
+    let dot = premium_text("•").size(9.0);
+    let secondary = premium_text(secondary)
+        .size(11.0)
+        .weight(Weight::Regular);
+
+    let content_w = ICON_BADGE_SIZE
+        + BADGE_GAP
+        + measured_width(&name)
+        + ELEMENT_GAP
+        + measured_width(&dot)
+        + ELEMENT_GAP
+        + measured_width(&secondary);
+
+    (content_w + INNER_PADDING * 2.0).clamp(ISLAND_MIN_BODY_WIDTH, ISLAND_MAX_BODY_WIDTH)
+}
 
 /*
  * The width the pill needs: the name, the gap, and the speed when there is one,
@@ -570,9 +608,12 @@ fn speed_text() -> Option<String> {
 /*
  * The menu window. It spans the whole screen so any click that lands outside the
  * panel reaches it and packs it away, and it holds the panel itself in the top
- * right, right under the icon. It only exists while the menu is open.
+ * right, smoothly attached to the panel like a dynamic island with inverse curved ears.
+ * The menu animates open and closed with a smooth height and opacity transition.
  */
 pub fn wifi_menu() -> LayerWindow {
+    let progress = menu_progress();
+
     let window = LayerWindow::new()
         .width(aether::Full)
         .height(aether::Full)
@@ -601,11 +642,104 @@ pub fn wifi_menu() -> LayerWindow {
             close();
         });
 
-    if !open() {
+    // fully collapsed and not opening: hide the window entirely
+    if progress <= 0.001 && !open() {
         return window.click_through().child(blank());
     }
 
     let theme = theme();
+    let r_e = EAR_RADIUS;
+    let total_w = BOX_WIDTH + 2.0 * r_e;
+    let total_h = BOX_HEIGHT;
+
+    // the menu grows out of the hint the pointer is on, so a click morphs the
+    // island into the panel instead of replacing it with a separate animation
+    let hint_progress = island_progress(hovered() || open() || progress > 0.001);
+    let hint_body_w = (hint_body_width(&network_name(), &connection_status().0)
+        * (0.75 + 0.25 * hint_progress))
+        .round();
+    let hint_h = (ISLAND_MAX_HEIGHT * hint_progress).round().max(2.0);
+    let hint_r_e = (EAR_RADIUS * hint_progress).min(hint_h * 0.44);
+    let hint_w = hint_body_w + 2.0 * hint_r_e;
+
+    let current_w = (hint_w + (total_w - hint_w) * progress).round().max(2.0);
+    let current_h = (hint_h + (total_h - hint_h) * progress).round().max(2.0);
+    let current_r_e = (hint_r_e + (EAR_RADIUS - hint_r_e) * progress).min(current_h * 0.44);
+    let current_r_b = BOX_RADIUS.min(current_h * 0.44);
+    let current_body_w = (current_w - 2.0 * current_r_e).max(0.0);
+
+    let fill_shape = Box::new(
+        build_island_path(current_w, current_h, current_r_e, current_r_b)
+            .fill(theme.bar)
+            .opacity(progress)
+    ) as Box<dyn Shape>;
+
+    let border_shape = Box::new(
+        build_island_border_path(current_w, current_h, current_r_e, current_r_b)
+            .stroke(1.0, theme.surface_border)
+            .opacity(progress)
+    ) as Box<dyn Shape>;
+
+    let canvas = Canvas::new()
+        .width(current_w)
+        .height(current_h)
+        .shapes(vec![fill_shape, border_shape]);
+
+    // content fades in after the shape is partially open
+    let content_opacity = ((progress - 0.25) / 0.75).clamp(0.0, 1.0);
+
+    let menu_card = Rectangle::new()
+        .width(current_w)
+        .height(current_h)
+        .fill(Color::TRANSPARENT)
+        .clip()
+        .on_click(|_| {})
+        .child(
+            Stack::new(children![
+                // Ambient drop shadow beneath the body
+                Rectangle::new()
+                    .width(current_w)
+                    .height(current_h)
+                    .fill(Color::TRANSPARENT)
+                    .padding(Padding {
+                        top: 0.0,
+                        right: current_r_e,
+                        bottom: 0.0,
+                        left: current_r_e,
+                    })
+                    .align_child(Align::Center, Align::Start)
+                    .child(
+                        Rectangle::new()
+                            .width(current_body_w)
+                            .height(current_h)
+                            .radius_bottom_left(current_r_b)
+                            .radius_bottom_right(current_r_b)
+                            .fill(Color::TRANSPARENT)
+                            .shadow(
+                                Shadow::drop(theme.shadow)
+                                    .opacity(0.45 * progress)
+                                    .blur(22.0)
+                                    .offset(0.0, 8.0),
+                            )
+                    ),
+                // The curved background seamless with the top bar
+                canvas,
+                // Menu body padded within the ears, fades in smoothly
+                Rectangle::new()
+                    .width(current_w)
+                    .height(current_h)
+                    .fill(Color::TRANSPARENT)
+                    .opacity(content_opacity)
+                    .padding(Padding {
+                        top: BOX_PADDING,
+                        right: current_r_e + BOX_PADDING,
+                        bottom: BOX_PADDING,
+                        left: current_r_e + BOX_PADDING,
+                    })
+                    .align_child(Align::Start, Align::Start)
+                    .child(box_body()),
+            ])
+        );
 
     window.child(
         Rectangle::new()
@@ -620,30 +754,13 @@ pub fn wifi_menu() -> LayerWindow {
                     .height(Parent)
                     .fill(Color::TRANSPARENT)
                     .padding(aether::Padding {
-                        top: (EDGE_INSET_TOP) as f32,
-                        right: EDGE_INSET_RIGHT,
+                        top: PANEL_HEIGHT,
+                        right: ISLAND_EDGE_INSET_RIGHT,
                         bottom: 0.0,
                         left: 0.0,
                     })
                     .align_child(Align::End, Align::Start)
-                    .child(
-                        Rectangle::new()
-                            .width(BOX_WIDTH)
-                            .height(BOX_HEIGHT)
-                            .fill(theme.surface)
-                            .border(1.0, theme.surface_border)
-                            .radius(BOX_RADIUS)
-                            .shadow(
-                                Shadow::drop(theme.shadow)
-                                    .opacity(0.42)
-                                    .blur(20.0)
-                                    .offset(0.0, 8.0),
-                            )
-                            .padding(BOX_PADDING)
-                            // a click on the panel itself stays inside the menu
-                            .on_click(|_| {})
-                            .child(box_body()),
-                    ),
+                    .child(menu_card),
             ),
     )
 }

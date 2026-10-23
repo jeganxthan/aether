@@ -54,7 +54,7 @@ impl KeyboardHandler for WaylandState {
             return;
         };
 
-        let key = to_key(&event);
+        let key = to_key(&event, self.control_down);
 
         // a focused text input takes the key before the window's on_key sees it
         if focus::send(key) {
@@ -84,8 +84,13 @@ impl KeyboardHandler for WaylandState {
         _: &QueueHandle<Self>,
         _: &WlKeyboard,
         _: u32,
-        _: KeyEvent,
+        event: KeyEvent,
     ) {
+        let Some(surface) = self.keyboard_focus.clone() else { return; };
+        let key = to_key(&event, self.control_down);
+        if focus::send(key) {
+            self.request_frame_on(&surface);
+        }
     }
 
     fn release_key(
@@ -104,18 +109,20 @@ impl KeyboardHandler for WaylandState {
         _: &QueueHandle<Self>,
         _: &WlKeyboard,
         _: u32,
-        _: Modifiers,
+        modifiers: Modifiers,
         _: RawModifiers,
         _: u32,
     ) {
+        self.control_down = modifiers.ctrl;
     }
 }
 
-fn to_key(event: &KeyEvent) -> Key {
+fn to_key(event: &KeyEvent, control_down: bool) -> Key {
     match event.keysym {
         Keysym::Return | Keysym::KP_Enter => Key::Enter,
         Keysym::Escape => Key::Escape,
         Keysym::Tab => Key::Tab,
+        Keysym::BackSpace if control_down => Key::ControlBackspace,
         Keysym::BackSpace => Key::Backspace,
         Keysym::space => Key::Space,
         Keysym::Up => Key::Up,

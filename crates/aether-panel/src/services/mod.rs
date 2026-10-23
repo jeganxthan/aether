@@ -5,3 +5,5 @@ pub mod osd;
 pub mod runtime;
 pub mod wifi;
 pub mod applications;
+pub mod player;
+
