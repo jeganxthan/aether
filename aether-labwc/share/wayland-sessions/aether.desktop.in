@@ -1,0 +1,7 @@
+[Desktop Entry]
+Name=Aether
+Comment=Aether labwc session with SceneFX blur support
+Exec=@AETHER_LAUNCHER@
+TryExec=/usr/bin/labwc
+Type=Application
+DesktopNames=Aether;labwc;wlroots

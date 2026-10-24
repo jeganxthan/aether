@@ -4,11 +4,10 @@ use std::time::{Duration, Instant};
 
 use super::runtime::runtime;
 use aether::refresh;
-use aether_services::start_device_monitor;
 use aether_services::notifications::{
-    Notification, NotificationEvent, NotificationService, start_battery_alerts,
-    start_wifi_alerts,
+    Notification, NotificationEvent, NotificationService, start_battery_alerts, start_wifi_alerts,
 };
+use aether_services::start_device_monitor;
 
 // how many popups can sit on screen at once
 pub const MAX_VISIBLE: usize = 3;

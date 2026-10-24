@@ -329,6 +329,7 @@ pub fn networks() -> Vec<WifiNetwork> {
 
     SCAN_STARTED.get_or_init(|| {
         runtime().spawn(scan());
+        SCAN_REQUEST.get_or_init(Notify::new).notify_one();
     });
 
     networks.read().map(|list| list.clone()).unwrap_or_default()

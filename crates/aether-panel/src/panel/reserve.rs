@@ -1,4 +1,3 @@
-
 use aether::{Horizontal, Layer, LayerWindow, Parent, Rectangle, Vertical, Zone};
 
 use super::island::{ISLAND_HEIGHT, ISLAND_WIDTH};

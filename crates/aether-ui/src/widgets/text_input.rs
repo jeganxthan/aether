@@ -98,6 +98,10 @@ impl TextInput {
         fields::set(id, field);
     }
 
+    pub fn get_text(id: &'static str) -> String {
+        fields::get(id).text
+    }
+
     // runs after every change to the text, with the whole new text
     pub fn on_change(mut self, handler: impl Fn(String) + 'static) -> Self {
         self.on_change = Some(Rc::new(handler));

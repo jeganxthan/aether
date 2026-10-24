@@ -1,6 +1,5 @@
-
-use std::time::Duration;
 use aether::Service;
+use std::time::Duration;
 
 pub struct IslandState {
     pub expanded: bool,

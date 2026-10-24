@@ -9,15 +9,21 @@ use panel::osd::osd;
 use panel::top::panel;
 // use panel::reserve::reserve;
 // use panel::island::island;
-use panel::component::wifi_popup::{wifi_hint, wifi_menu};
-use panel::component::launcher::launcher;
+use panel::component::battery_menu::battery_menu;
 use panel::component::battery_popup::battery_hint;
+use panel::component::clipboard_popup;
+use panel::component::launcher::launcher;
 use panel::component::player_popup::{player_menu, player_popup};
+use panel::component::polkit_auth;
+use panel::component::settings_popup::settings_hint;
+use panel::component::wifi_popup::{wifi_hint, wifi_menu};
 use panel::lockscreen::view as lockscreen;
 
 fn main() {
     // Warm up launcher applications and icon cache in the background on startup
     panel::component::launcher::preload();
+    clipboard_popup::start();
+    polkit_auth::start();
 
     // Inside your existing async startup function:
     App::new()
@@ -29,9 +35,14 @@ fn main() {
         .window(wifi_menu)
         // battery percentage and time estimate on hover
         .window(battery_hint)
+        // battery details and power profile island opened from the battery icon
+        .window(battery_menu)
+        .window(clipboard_popup::view)
         // dynamic island media player popup
         .window(player_popup)
         .window(player_menu)
+        .window(polkit_auth::auth_prompt)
+        .window(settings_hint)
         // the volume/brightness display that rises from the bottom on a change
         .window(osd)
         .window(launcher)
@@ -43,6 +54,7 @@ fn main() {
         // `aether ipc call theme light` / `dark` / `toggle`, and the shell redraws in it
         .ipc("theme", switch_theme)
         .ipc("launcher", handle_launcher)
+        .ipc("clipboard", handle_clipboard)
         .run();
 }
 
@@ -94,6 +106,17 @@ fn handle_launcher(arguments: &[String]) -> String {
     "ok".to_owned()
 }
 
+fn handle_clipboard(arguments: &[String]) -> String {
+    match arguments.first().map(String::as_str).unwrap_or("open") {
+        "open" => clipboard_popup::open(),
+        "close" => clipboard_popup::close(),
+        "toggle" => clipboard_popup::toggle(),
+        "pin" => clipboard_popup::pin_selected(),
+        _ => return "unknown clipboard action".to_owned(),
+    }
+
+    "ok".to_owned()
+}
 
 // python3 - "$XDG_RUNTIME_DIR/aether.sock" light <<'PY'
 // import socket, sys
@@ -101,6 +124,5 @@ fn handle_launcher(arguments: &[String]) -> String {
 // s.sendall(("theme\n%s\n" % sys.argv[2]).encode()); s.shutdown(socket.SHUT_WR)
 // print(s.recv(4096).decode().strip())
 // PY
-
 
 // python3 -c 'import os,socket; s=socket.socket(socket.AF_UNIX); s.connect(os.path.join(os.environ["XDG_RUNTIME_DIR"],"aether.sock")); s.sendall(b"lock\n"); s.shutdown(socket.SHUT_WR); print(s.recv(4096).decode().strip())

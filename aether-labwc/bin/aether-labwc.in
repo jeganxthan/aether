@@ -1,0 +1,16 @@
+#!/bin/sh
+
+prefix="@AETHER_PREFIX@"
+if [ ! -x "$prefix/bin/labwc" ]; then
+	printf '%s\n' "Aether labwc was not found at $prefix/bin/labwc; run scripts/build.sh first." >&2
+	exit 127
+fi
+
+export LD_LIBRARY_PATH="$prefix/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
+if [ -n "${XDG_DATA_DIRS:-}" ]; then
+	export XDG_DATA_DIRS="$prefix/share:$XDG_DATA_DIRS"
+else
+	export XDG_DATA_DIRS="$prefix/share:/usr/local/share:/usr/share"
+fi
+
+exec "$prefix/bin/labwc" "$@"

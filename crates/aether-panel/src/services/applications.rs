@@ -1,4 +1,3 @@
-
 use std::collections::{HashMap, HashSet};
 use std::env;
 use std::fs;
@@ -71,7 +70,9 @@ fn find_icon_on_disk(name: &str) -> Option<PathBuf> {
         "/usr/share/icons/Papirus".to_string(),
     ];
 
-    let sizes = ["48x48", "scalable", "32x32", "64x64", "128x128", "256x256", "symbolic"];
+    let sizes = [
+        "48x48", "scalable", "32x32", "64x64", "128x128", "256x256", "symbolic",
+    ];
     for base in &bases {
         for size in &sizes {
             for sub in &["apps", "categories", "devices", "status", "ui"] {
@@ -159,7 +160,6 @@ impl ApplicationService {
                     icon: entry.icon.filter(|icon| !icon.is_empty()),
                     desktop_file: file,
                 });
-
             }
         }
 
@@ -247,9 +247,7 @@ impl ApplicationService {
             Ok(_) => Ok(()),
             Err(gio_error) if gio_error.kind() == io::ErrorKind::NotFound => {
                 // Fallback for systems with gtk-launch but no gio executable.
-                let status = Command::new("gtk-launch")
-                    .arg(&app.id)
-                    .status()?;
+                let status = Command::new("gtk-launch").arg(&app.id).status()?;
 
                 if status.success() {
                     Ok(())
@@ -276,7 +274,6 @@ struct DesktopEntry {
     no_display: bool,
 }
 
-
 fn application_directories() -> Vec<PathBuf> {
     let mut directories = Vec::new();
 
@@ -297,10 +294,7 @@ fn application_directories() -> Vec<PathBuf> {
     directories
 }
 
-fn collect_desktop_files(
-    directory: &Path,
-    output: &mut Vec<PathBuf>,
-) -> io::Result<()> {
+fn collect_desktop_files(directory: &Path, output: &mut Vec<PathBuf>) -> io::Result<()> {
     for item in fs::read_dir(directory)? {
         let item = item?;
         let path = item.path();
@@ -308,9 +302,7 @@ fn collect_desktop_files(
 
         if file_type.is_dir() {
             collect_desktop_files(&path, output)?;
-        } else if file_type.is_file()
-            && path.extension().is_some_and(|ext| ext == "desktop")
-        {
+        } else if file_type.is_file() && path.extension().is_some_and(|ext| ext == "desktop") {
             output.push(path);
         }
     }
@@ -357,12 +349,9 @@ fn parse_desktop_file(path: &Path) -> io::Result<DesktopEntry> {
             "Type" => entry.entry_type = Some(value.to_string()),
             "TryExec" => entry.try_exec = Some(value.to_string()),
             "Hidden" => entry.hidden = value.eq_ignore_ascii_case("true"),
-            "NoDisplay" => {
-                entry.no_display = value.eq_ignore_ascii_case("true")
-            }
+            "NoDisplay" => entry.no_display = value.eq_ignore_ascii_case("true"),
             _ => {}
         }
-
     }
 
     Ok(entry)
@@ -380,6 +369,5 @@ fn command_exists(command: &str) -> bool {
         return false;
     };
 
-    env::split_paths(&path_env)
-        .any(|directory| directory.join(command).is_file())
+    env::split_paths(&path_env).any(|directory| directory.join(command).is_file())
 }

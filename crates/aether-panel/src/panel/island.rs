@@ -67,7 +67,12 @@ pub fn island() -> LayerWindow {
                         .radius_bottom_right(CORNER_RADIUS)
                         .fill(Color::BLACK)
                         .align_child(Center, Center)
-                        .child(Text::new(time).font("Maple Mono").color(Color::WHITE).size(12.0))
+                        .child(
+                            Text::new(time)
+                                .font("Maple Mono")
+                                .color(Color::WHITE)
+                                .size(12.0),
+                        )
                         .on_hover(|hovered| {
                             let mut state = IslandState::write();
                             state.expanded = hovered;

@@ -1,9 +1,20 @@
 use std::collections::HashMap;
+use std::collections::hash_map::DefaultHasher;
+use std::hash::{Hash, Hasher};
+use std::io::Cursor;
 use std::path::PathBuf;
+use std::sync::{Mutex, OnceLock};
+use std::time::{Duration, Instant};
 
+use image::ImageFormat;
+use reqwest::{Client, Url};
 use zbus::Connection;
 use zbus::fdo::DBusProxy;
 use zvariant::{OwnedValue, Value};
+
+const MAX_ARTWORK_BYTES: usize = 12 * 1024 * 1024;
+const ARTWORK_RETRY_DELAY: Duration = Duration::from_secs(30);
+static ARTWORK_ATTEMPTS: OnceLock<Mutex<HashMap<String, Instant>>> = OnceLock::new();
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum PlayerBrand {
@@ -78,19 +89,137 @@ impl PlayerState {
     /// Local filesystem path to the album art image, if available
     pub fn local_art_path(&self) -> Option<PathBuf> {
         let url = self.metadata.art_url.as_deref()?;
-        if let Some(path_str) = url.strip_prefix("file://") {
-            let path = PathBuf::from(path_str);
-            if path.exists() {
-                return Some(path);
-            }
-        } else {
-            let path = PathBuf::from(url);
-            if path.exists() {
-                return Some(path);
-            }
+        if let Some(path) = artwork_cache_path(url) {
+            return path.exists().then_some(path);
         }
-        None
+
+        let path = if let Some(path) = url.strip_prefix("file://") {
+            let path = if let Some(path) = path.strip_prefix("localhost/") {
+                format!("/{path}")
+            } else {
+                path.to_string()
+            };
+            let decoded = decode_file_uri_path(&path)?;
+            PathBuf::from(decoded)
+        } else if url.contains("://") {
+            return None;
+        } else {
+            PathBuf::from(url)
+        };
+
+        path.exists().then_some(path)
     }
+}
+
+pub async fn cache_remote_artwork(url: &str) -> Option<PathBuf> {
+    let path = artwork_cache_path(url)?;
+    if path.exists() || !may_attempt_artwork(url) {
+        return path.exists().then_some(path);
+    }
+
+    let result = async {
+        let client = Client::builder()
+            .redirect(reqwest::redirect::Policy::none())
+            .timeout(Duration::from_secs(5))
+            .build()
+            .ok()?;
+        let mut response = client.get(url).send().await.ok()?;
+        if !response.status().is_success() {
+            return None;
+        }
+        if response
+            .content_length()
+            .is_some_and(|length| length > MAX_ARTWORK_BYTES as u64)
+        {
+            return None;
+        }
+
+        let mut bytes = Vec::new();
+        while let Some(chunk) = response.chunk().await.ok()? {
+            if bytes.len() + chunk.len() > MAX_ARTWORK_BYTES {
+                return None;
+            }
+            bytes.extend_from_slice(&chunk);
+        }
+
+        let decoded = image::load_from_memory(&bytes).ok()?;
+        let mut png = Cursor::new(Vec::new());
+        decoded.write_to(&mut png, ImageFormat::Png).ok()?;
+
+        let parent = path.parent()?;
+        std::fs::create_dir_all(parent).ok()?;
+        let temporary = path.with_extension("png.tmp");
+        std::fs::write(&temporary, png.into_inner()).ok()?;
+        std::fs::rename(&temporary, &path).ok()?;
+
+        Some(path)
+    }
+    .await;
+
+    result
+}
+
+fn artwork_cache_path(url: &str) -> Option<PathBuf> {
+    let url = Url::parse(url).ok()?;
+    if url.scheme() != "https" || !is_artwork_host(url.host_str()?) {
+        return None;
+    }
+
+    let cache_dir = std::env::var_os("XDG_CACHE_HOME")
+        .map(PathBuf::from)
+        .or_else(|| std::env::var_os("HOME").map(|home| PathBuf::from(home).join(".cache")))?;
+
+    let mut hasher = DefaultHasher::new();
+    url.as_str().hash(&mut hasher);
+    Some(
+        cache_dir
+            .join("aether")
+            .join("player-art")
+            .join(format!("{:016x}.png", hasher.finish())),
+    )
+}
+
+fn is_artwork_host(host: &str) -> bool {
+    host == "scdn.co" || host.ends_with(".scdn.co")
+}
+
+fn may_attempt_artwork(url: &str) -> bool {
+    let attempts = ARTWORK_ATTEMPTS.get_or_init(|| Mutex::new(HashMap::new()));
+    let Ok(mut attempts) = attempts.lock() else {
+        return false;
+    };
+
+    let now = Instant::now();
+    attempts.retain(|_, last_attempt| now.duration_since(*last_attempt) < ARTWORK_RETRY_DELAY);
+    if attempts
+        .get(url)
+        .is_some_and(|last_attempt| now.duration_since(*last_attempt) < ARTWORK_RETRY_DELAY)
+    {
+        return false;
+    }
+
+    attempts.insert(url.to_owned(), now);
+    true
+}
+
+fn decode_file_uri_path(path: &str) -> Option<String> {
+    let bytes = path.as_bytes();
+    let mut decoded = Vec::with_capacity(bytes.len());
+    let mut index = 0;
+
+    while index < bytes.len() {
+        if bytes[index] == b'%' {
+            let hex = bytes.get(index + 1..index + 3)?;
+            let hex = std::str::from_utf8(hex).ok()?;
+            decoded.push(u8::from_str_radix(hex, 16).ok()?);
+            index += 3;
+        } else {
+            decoded.push(bytes[index]);
+            index += 1;
+        }
+    }
+
+    String::from_utf8(decoded).ok()
 }
 
 pub struct PlayerService {
@@ -276,4 +405,27 @@ impl PlayerService {
         Ok(())
     }
 
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{decode_file_uri_path, is_artwork_host};
+
+    #[test]
+    fn decodes_percent_escaped_file_uri_paths() {
+        assert_eq!(
+            decode_file_uri_path("/tmp/album%20art%2Bcover.jpg").as_deref(),
+            Some("/tmp/album art+cover.jpg")
+        );
+        assert_eq!(decode_file_uri_path("/tmp/bad%2"), None);
+        assert_eq!(decode_file_uri_path("/tmp/%FF"), None);
+    }
+
+    #[test]
+    fn artwork_downloads_are_limited_to_spotify_cdn_hosts() {
+        assert!(is_artwork_host("i.scdn.co"));
+        assert!(is_artwork_host("image.scdn.co"));
+        assert!(!is_artwork_host("scdn.co.attacker.example"));
+        assert!(!is_artwork_host("example.com"));
+    }
 }

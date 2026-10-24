@@ -1,6 +1,6 @@
 use aether::{
     Align, Center, Color, Horizontal, Layer, LayerWindow, Margin, Parent, Rectangle, Row, Shadow,
-    Text, Vertical, Widget, Weight, Zone, children,
+    Text, Vertical, Weight, Widget, Zone, children,
 };
 
 use crate::panel::svg::osd_svg::OsdIcon;

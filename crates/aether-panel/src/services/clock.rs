@@ -63,10 +63,7 @@ pub fn clock() -> String {
         });
     });
 
-    latest
-        .read()
-        .map(|time| time.clone())
-        .unwrap_or_default()
+    latest.read().map(|time| time.clone()).unwrap_or_default()
 }
 
 // the month and day, like OCT 18, read by the bar next to the time
@@ -76,8 +73,5 @@ pub fn date() -> String {
     // the first call primes the cache, so the same task is started once here too
     let _ = clock();
 
-    today
-        .read()
-        .map(|date| date.clone())
-        .unwrap_or_default()
+    today.read().map(|date| date.clone()).unwrap_or_default()
 }

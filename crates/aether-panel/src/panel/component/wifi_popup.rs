@@ -1,11 +1,11 @@
-use std::sync::{Mutex, OnceLock};
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+use std::sync::{Mutex, OnceLock};
 use std::time::Duration;
 
 use aether::{
-    Align, Animation, Canvas, Color, Column, Cursor, Easing, Horizontal, InputArea, Key, Keyboard, Layer,
-    LayerWindow, Margin, Padding, Parent, Path, Radius, Rectangle, Row, ScrollArea, Shadow, Shape, Size,
-    SpaceBetween, Stack, Start, Text, TextInput, Vertical, Weight, Widget, Zone, children,
+    Align, Animation, Canvas, Color, Column, Cursor, Easing, Horizontal, InputArea, Key, Keyboard,
+    Layer, LayerWindow, Margin, Padding, Parent, Path, Radius, Rectangle, Row, ScrollArea, Shape,
+    Size, SpaceBetween, Stack, Start, Text, TextInput, Vertical, Weight, Widget, Zone, children,
 };
 
 use crate::panel::svg::wifi_svg::WifiSignalIcon;
@@ -61,7 +61,7 @@ const SWITCH_TRACK_HEIGHT: f32 = 22.0;
 const SWITCH_KNOB: f32 = 16.0;
 
 // the network list below the switch
-const LIST_VISIBLE_ROWS: f32 = 6.0;
+const LIST_MAX_VISIBLE_ROWS: usize = 6;
 const LIST_ROW_HEIGHT: f32 = 34.0;
 const LIST_ROW_GAP: f32 = 4.0;
 const LIST_ICON_SIZE: f32 = 15.0;
@@ -92,11 +92,30 @@ const INPUT_SECTION_HEIGHT: f32 = INPUT_FIELD_HEIGHT + BOX_GAP + BUTTON_HEIGHT;
 // the width the two buttons share, which is the box inside its padding
 const BUTTON_AREA_WIDTH: f32 = BOX_WIDTH - BOX_PADDING * 2.0;
 
-// the box's height follows what it holds: the switch row, a gap, and the visible list
+// the list grows with available networks up to a scrollable six-row limit
 const SWITCH_ROW_HEIGHT: f32 = SWITCH_TRACK_HEIGHT;
-const LIST_HEIGHT: f32 =
-    LIST_VISIBLE_ROWS * LIST_ROW_HEIGHT + (LIST_VISIBLE_ROWS - 1.0) * LIST_ROW_GAP;
-const BOX_HEIGHT: f32 = BOX_PADDING * 2.0 + SWITCH_ROW_HEIGHT + BOX_GAP + LIST_HEIGHT;
+
+fn visible_network_rows(network_count: usize) -> usize {
+    network_count.clamp(1, LIST_MAX_VISIBLE_ROWS)
+}
+
+fn network_list_height(network_count: usize) -> f32 {
+    let rows = visible_network_rows(network_count) as f32;
+
+    rows * LIST_ROW_HEIGHT + (rows - 1.0) * LIST_ROW_GAP
+}
+
+fn menu_height(network_count: usize) -> f32 {
+    BOX_PADDING * 2.0 + SWITCH_ROW_HEIGHT + BOX_GAP + network_list_height(network_count)
+}
+
+fn network_section_height(saved: bool) -> f32 {
+    if saved {
+        BUTTON_HEIGHT
+    } else {
+        INPUT_SECTION_HEIGHT
+    }
+}
 
 // the gap between a part and the bottom of the top bar
 const EDGE_INSET_TOP: f32 = 30.0;
@@ -134,30 +153,7 @@ const INPUT_FIELD_PADDING: Padding = Padding {
 // sets whether the pointer is over the icon or the hint, waking the shell to redraw
 pub fn set_hovered(hovered: bool) {
     STARTED.get_or_init(|| ());
-
-    if cfg!(test) {
-        if HOVERED.swap(hovered, Ordering::SeqCst) != hovered {
-            aether::refresh();
-        }
-        return;
-    }
-
-    if hovered {
-        HOVER_GENERATION.fetch_add(1, Ordering::SeqCst);
-        if !HOVERED.swap(true, Ordering::SeqCst) {
-            aether::refresh();
-        }
-    } else {
-        let generation = HOVER_GENERATION.fetch_add(1, Ordering::SeqCst) + 1;
-        crate::services::runtime::runtime().spawn(async move {
-            tokio::time::sleep(Duration::from_millis(140)).await;
-            if HOVER_GENERATION.load(Ordering::SeqCst) == generation {
-                if HOVERED.swap(false, Ordering::SeqCst) {
-                    aether::refresh();
-                }
-            }
-        });
-    }
+    super::popup_motion::set_hovered(hovered, &HOVERED, &HOVER_GENERATION);
 }
 
 // whether the pointer is over the icon or the hint
@@ -233,7 +229,7 @@ const ISLAND_WINDOW_WIDTH: f32 = 360.0;
 const ISLAND_WINDOW_HEIGHT: f32 = 52.0;
 const ISLAND_EDGE_INSET_RIGHT: f32 = 8.0;
 
-const ISLAND_ANIM_DURATION: Duration = Duration::from_millis(220);
+const ISLAND_ANIM_DURATION: Duration = super::popup_motion::EXPANSION_DURATION;
 
 const ICON_BADGE_SIZE: f32 = 20.0;
 const ICON_DRAW_SIZE: f32 = 12.0;
@@ -247,23 +243,55 @@ static PROGRESS: OnceLock<Mutex<Animation<f32>>> = OnceLock::new();
 const MENU_ANIM_DURATION: Duration = Duration::from_millis(280);
 static MENU_PROGRESS: OnceLock<Mutex<Animation<f32>>> = OnceLock::new();
 
+// the extra height and form fade when a network is selected
+const SECTION_ANIM_DURATION: Duration = Duration::from_millis(240);
+static SECTION_PROGRESS: OnceLock<Mutex<Animation<f32>>> = OnceLock::new();
+
 fn island_progress(expanded: bool) -> f32 {
     let animation = PROGRESS.get_or_init(|| {
-        Mutex::new(Animation::new(0.0).duration(ISLAND_ANIM_DURATION).easing(Easing::Out))
+        Mutex::new(
+            Animation::new(0.0)
+                .duration(ISLAND_ANIM_DURATION)
+                .easing(Easing::Out),
+        )
     });
 
-    let mut animation = animation.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+    let mut animation = animation
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
     animation.to(if expanded { 1.0 } else { 0.0 });
     animation.value()
 }
 
 fn menu_progress() -> f32 {
     let animation = MENU_PROGRESS.get_or_init(|| {
-        Mutex::new(Animation::new(0.0).duration(MENU_ANIM_DURATION).easing(Easing::Out))
+        Mutex::new(
+            Animation::new(0.0)
+                .duration(MENU_ANIM_DURATION)
+                .easing(Easing::Out),
+        )
     });
 
-    let mut animation = animation.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+    let mut animation = animation
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
     animation.to(if open() { 1.0 } else { 0.0 });
+    animation.value()
+}
+
+fn section_progress(expanded: bool) -> f32 {
+    let animation = SECTION_PROGRESS.get_or_init(|| {
+        Mutex::new(
+            Animation::new(0.0)
+                .duration(SECTION_ANIM_DURATION)
+                .easing(Easing::Out),
+        )
+    });
+
+    let mut animation = animation
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    animation.to(if expanded { 1.0 } else { 0.0 });
     animation.value()
 }
 
@@ -291,7 +319,14 @@ fn build_island_path(w: f32, h: f32, r_e: f32, r_b: f32) -> Path {
         .line_to(r_e, h - r_b)
         .cubic_to(r_e, h - r_b + k_b, r_e + r_b - k_b, h, r_e + r_b, h)
         .line_to(w - r_e - r_b, h)
-        .cubic_to(w - r_e - r_b + k_b, h, w - r_e, h - r_b + k_b, w - r_e, h - r_b)
+        .cubic_to(
+            w - r_e - r_b + k_b,
+            h,
+            w - r_e,
+            h - r_b + k_b,
+            w - r_e,
+            h - r_b,
+        )
         .line_to(w - r_e, r_e)
         .cubic_to(w - r_e, r_e - k_e, w - k_e, 0.0, w, 0.0)
         .line_to(0.0, 0.0)
@@ -312,7 +347,14 @@ fn build_island_border_path(w: f32, h: f32, r_e: f32, r_b: f32) -> Path {
         .line_to(r_e, h - r_b)
         .cubic_to(r_e, h - r_b + k_b, r_e + r_b - k_b, h, r_e + r_b, h)
         .line_to(w - r_e - r_b, h)
-        .cubic_to(w - r_e - r_b + k_b, h, w - r_e, h - r_b + k_b, w - r_e, h - r_b)
+        .cubic_to(
+            w - r_e - r_b + k_b,
+            h,
+            w - r_e,
+            h - r_b + k_b,
+            w - r_e,
+            h - r_b,
+        )
         .line_to(w - r_e, r_e)
         .cubic_to(w - r_e, r_e - k_e, w - k_e, 0.0, w, 0.0)
 }
@@ -385,9 +427,7 @@ pub fn wifi_hint() -> LayerWindow {
         .size(12.0)
         .weight(Weight::SemiBold);
 
-    let dot_widget = premium_text("•")
-        .color(theme.text_faint)
-        .size(9.0);
+    let dot_widget = premium_text("•").color(theme.text_faint).size(9.0);
 
     let secondary_widget = premium_text(secondary_text)
         .color(secondary_color)
@@ -410,11 +450,20 @@ pub fn wifi_hint() -> LayerWindow {
 
     let content_row = Row::new(children![
         icon_badge,
-        Rectangle::new().width(BADGE_GAP).height(1.0).fill(Color::TRANSPARENT),
+        Rectangle::new()
+            .width(BADGE_GAP)
+            .height(1.0)
+            .fill(Color::TRANSPARENT),
         name_widget,
-        Rectangle::new().width(ELEMENT_GAP).height(1.0).fill(Color::TRANSPARENT),
+        Rectangle::new()
+            .width(ELEMENT_GAP)
+            .height(1.0)
+            .fill(Color::TRANSPARENT),
         dot_widget,
-        Rectangle::new().width(ELEMENT_GAP).height(1.0).fill(Color::TRANSPARENT),
+        Rectangle::new()
+            .width(ELEMENT_GAP)
+            .height(1.0)
+            .fill(Color::TRANSPARENT),
         secondary_widget,
     ])
     .height(Parent)
@@ -459,12 +508,7 @@ pub fn wifi_hint() -> LayerWindow {
                     .radius_bottom_left(r_b)
                     .radius_bottom_right(r_b)
                     .fill(Color::TRANSPARENT)
-                    .shadow(
-                        Shadow::drop(theme.shadow)
-                            .opacity(0.35 * progress)
-                            .blur(14.0)
-                            .offset(0.0, 4.0),
-                    )
+                    .shadow(super::island_shadow(0.35 * progress),)
             ),
         canvas,
         Rectangle::new()
@@ -548,10 +592,7 @@ fn connection_status() -> (String, Color) {
     }
 
     if ethernet_connected() || wifi().is_some() {
-        return (
-            "Connected".to_string(),
-            Color::rgba(74, 222, 128, 230),
-        );
+        return ("Connected".to_string(), Color::rgba(74, 222, 128, 230));
     }
 
     ("Disconnected".to_string(), theme().text_faint)
@@ -564,9 +605,7 @@ fn connection_status() -> (String, Color) {
 fn hint_body_width(name: &str, secondary: &str) -> f32 {
     let name = premium_text(name).size(12.0).weight(Weight::SemiBold);
     let dot = premium_text("•").size(9.0);
-    let secondary = premium_text(secondary)
-        .size(11.0)
-        .weight(Weight::Regular);
+    let secondary = premium_text(secondary).size(11.0).weight(Weight::Regular);
 
     let content_w = ICON_BADGE_SIZE
         + BADGE_GAP
@@ -647,10 +686,20 @@ pub fn wifi_menu() -> LayerWindow {
         return window.click_through().child(blank());
     }
 
+    let networks = networks();
+    let pending_ssid = pending();
+    let section_height = pending_ssid
+        .as_ref()
+        .and_then(|ssid| networks.iter().find(|network| &network.ssid == ssid))
+        .map(|network| network_section_height(network.saved))
+        .unwrap_or(0.0);
+    let section_progress = section_progress(section_height > 0.0);
+    let section_extra = (section_height + LIST_ROW_GAP) * section_progress;
+    let list_height = network_list_height(networks.len()) + section_extra;
     let theme = theme();
     let r_e = EAR_RADIUS;
     let total_w = BOX_WIDTH + 2.0 * r_e;
-    let total_h = BOX_HEIGHT;
+    let total_h = menu_height(networks.len()) + section_extra;
 
     // the menu grows out of the hint the pointer is on, so a click morphs the
     // island into the panel instead of replacing it with a separate animation
@@ -671,13 +720,13 @@ pub fn wifi_menu() -> LayerWindow {
     let fill_shape = Box::new(
         build_island_path(current_w, current_h, current_r_e, current_r_b)
             .fill(theme.bar)
-            .opacity(progress)
+            .opacity(progress),
     ) as Box<dyn Shape>;
 
     let border_shape = Box::new(
         build_island_border_path(current_w, current_h, current_r_e, current_r_b)
             .stroke(1.0, theme.surface_border)
-            .opacity(progress)
+            .opacity(progress),
     ) as Box<dyn Shape>;
 
     let canvas = Canvas::new()
@@ -694,52 +743,45 @@ pub fn wifi_menu() -> LayerWindow {
         .fill(Color::TRANSPARENT)
         .clip()
         .on_click(|_| {})
-        .child(
-            Stack::new(children![
-                // Ambient drop shadow beneath the body
-                Rectangle::new()
-                    .width(current_w)
-                    .height(current_h)
-                    .fill(Color::TRANSPARENT)
-                    .padding(Padding {
-                        top: 0.0,
-                        right: current_r_e,
-                        bottom: 0.0,
-                        left: current_r_e,
-                    })
-                    .align_child(Align::Center, Align::Start)
-                    .child(
-                        Rectangle::new()
-                            .width(current_body_w)
-                            .height(current_h)
-                            .radius_bottom_left(current_r_b)
-                            .radius_bottom_right(current_r_b)
-                            .fill(Color::TRANSPARENT)
-                            .shadow(
-                                Shadow::drop(theme.shadow)
-                                    .opacity(0.45 * progress)
-                                    .blur(22.0)
-                                    .offset(0.0, 8.0),
-                            )
-                    ),
-                // The curved background seamless with the top bar
-                canvas,
-                // Menu body padded within the ears, fades in smoothly
-                Rectangle::new()
-                    .width(current_w)
-                    .height(current_h)
-                    .fill(Color::TRANSPARENT)
-                    .opacity(content_opacity)
-                    .padding(Padding {
-                        top: BOX_PADDING,
-                        right: current_r_e + BOX_PADDING,
-                        bottom: BOX_PADDING,
-                        left: current_r_e + BOX_PADDING,
-                    })
-                    .align_child(Align::Start, Align::Start)
-                    .child(box_body()),
-            ])
-        );
+        .child(Stack::new(children![
+            // Ambient drop shadow beneath the body
+            Rectangle::new()
+                .width(current_w)
+                .height(current_h)
+                .fill(Color::TRANSPARENT)
+                .padding(Padding {
+                    top: 0.0,
+                    right: current_r_e,
+                    bottom: 0.0,
+                    left: current_r_e,
+                })
+                .align_child(Align::Center, Align::Start)
+                .child(
+                    Rectangle::new()
+                        .width(current_body_w)
+                        .height(current_h)
+                        .radius_bottom_left(current_r_b)
+                        .radius_bottom_right(current_r_b)
+                        .fill(Color::TRANSPARENT)
+                        .shadow(super::island_shadow(0.35 * progress),)
+                ),
+            // The curved background seamless with the top bar
+            canvas,
+            // Menu body padded within the ears, fades in smoothly
+            Rectangle::new()
+                .width(current_w)
+                .height(current_h)
+                .fill(Color::TRANSPARENT)
+                .opacity(content_opacity)
+                .padding(Padding {
+                    top: BOX_PADDING,
+                    right: current_r_e + BOX_PADDING,
+                    bottom: BOX_PADDING,
+                    left: current_r_e + BOX_PADDING,
+                })
+                .align_child(Align::Start, Align::Start)
+                .child(box_body(networks, list_height, section_progress)),
+        ]));
 
     window.child(
         Rectangle::new()
@@ -774,12 +816,10 @@ fn measured_width(text: &Text) -> f32 {
 }
 
 /*
- * What the menu holds: the wifi switch row on top, the list of networks in range
- * below it, and, while a network is being joined, the password input and the
- * connect and cancel pair under the list. The list is fixed to a few visible rows
- * and scrolls when more are found, so the box never grows past its set height.
+ * What the menu holds: the wifi switch row on top and the list of networks below.
+ * The list grows to fit its rows up to the six-row limit, then scrolls.
  */
-fn box_body() -> Column {
+fn box_body(networks: Vec<WifiNetwork>, list_height: f32, section_progress: f32) -> Column {
     Column::new(children![
         Row::new(children![
             premium_text("Wi-Fi")
@@ -795,7 +835,7 @@ fn box_body() -> Column {
         .height(SWITCH_ROW_HEIGHT)
         .align(Align::Center)
         .justify(SpaceBetween),
-        network_list(),
+        network_list(networks, list_height, section_progress),
     ])
     .width(Parent)
     .height(Parent)
@@ -931,18 +971,16 @@ fn password_of(password: String) -> Option<String> {
  * The networks in range, strongest first, each a row with a wifi range icon and
  * the name. The connected one is picked out with a brighter name. When a secured
  * network is picked, the password input opens directly below it. The list is a
- * scroll area over a fixed-height column, so it can be scrolled when it runs
- * past the visible rows.
+ * scroll area whose height follows the visible row count up to the six-row cap.
  */
-fn network_list() -> ScrollArea {
-    let list = networks();
+fn network_list(list: Vec<WifiNetwork>, list_height: f32, section_progress: f32) -> ScrollArea {
     let pending_ssid = pending();
 
     // with nothing in range, a plain note stands in for the rows
     let content = if list.is_empty() {
         Column::new(children![
             Row::new(children![
-                premium_text("Tap ↻ to search for networks")
+                premium_text("No networks found")
                     .color(theme().text_muted)
                     .size(LIST_TEXT_SIZE),
             ])
@@ -971,17 +1009,26 @@ fn network_list() -> ScrollArea {
             // the password input opens directly below the network it belongs to,
             // so the choice and its password sit together
             if is_pending {
-                items.push(Box::new(if saved {
+                let section_height = network_section_height(saved);
+                let section = if saved {
                     saved_actions(&ssid)
                 } else {
                     password_section(&ssid)
-                }));
+                };
+                items.push(Box::new(
+                    Rectangle::new()
+                        .width(Parent)
+                        .height(section_height)
+                        .fill(Color::TRANSPARENT)
+                        .opacity(section_progress)
+                        .child(section),
+                ));
 
                 // the whole section is what has to be seen: the row, its gap, and
                 // the input, which is taller than the visible list when it is long
-                reveal(row_top, INPUT_SECTION_HEIGHT);
+                reveal(row_top, section_height, list_height);
 
-                height += INPUT_SECTION_HEIGHT + LIST_ROW_GAP;
+                height += section_height + LIST_ROW_GAP;
             }
 
             height += LIST_ROW_GAP;
@@ -998,7 +1045,7 @@ fn network_list() -> ScrollArea {
 
     ScrollArea::new("wifi-menu-list", content)
         .width(Parent)
-        .height(LIST_HEIGHT)
+        .height(list_height)
 }
 
 /*
@@ -1149,11 +1196,11 @@ fn gap(width: f32) -> Rectangle {
  * view. It runs only the first time a network is picked, so a later scroll by the
  * pointer is not undone on the next redraw.
  */
-fn reveal(row_top: f32, section_height: f32) {
+fn reveal(row_top: f32, section_height: f32, list_height: f32) {
     // always try to scroll when a section appears so it stays visible
     let bottom = row_top + LIST_ROW_HEIGHT + LIST_ROW_GAP + section_height;
 
-    if bottom <= LIST_HEIGHT {
+    if bottom <= list_height {
         // section still fits, but scroll just enough to keep it visible
         ScrollArea::scroll_to("wifi-menu-list", 0.0);
         SCROLLED.store(false, Ordering::Relaxed);
@@ -1162,7 +1209,7 @@ fn reveal(row_top: f32, section_height: f32) {
     }
 
     // bring the bottom of the input section into view with a bit of padding
-    let offset = (bottom - LIST_HEIGHT + 4.0).max(0.0);
+    let offset = (bottom - list_height + 4.0).max(0.0);
 
     ScrollArea::scroll_to("wifi-menu-list", offset);
 
@@ -1248,7 +1295,7 @@ mod tests {
 
     #[test]
     fn the_box_has_room_for_its_row_and_list() {
-        assert!(BOX_WIDTH > 0.0 && BOX_HEIGHT > 0.0);
+        assert!(BOX_WIDTH > 0.0 && menu_height(0) > 0.0);
 
         // the switch and its label have to fit inside the box's padding
         let inside = BOX_WIDTH - BOX_PADDING * 2.0;
@@ -1259,10 +1306,10 @@ mod tests {
         );
 
         // the box is the padding, the switch row, the gap, and the list
-        let expected = BOX_PADDING * 2.0 + SWITCH_ROW_HEIGHT + BOX_GAP + LIST_HEIGHT;
+        let expected = BOX_PADDING * 2.0 + SWITCH_ROW_HEIGHT + BOX_GAP + network_list_height(0);
 
         assert!(
-            (BOX_HEIGHT - expected).abs() < 0.01,
+            (menu_height(0) - expected).abs() < 0.01,
             "the box height drifted from what it holds"
         );
 
@@ -1271,13 +1318,22 @@ mod tests {
 
     #[test]
     fn the_list_holds_its_visible_rows() {
-        // the visible list is the rows plus the gaps between them
-        let expected =
-            LIST_VISIBLE_ROWS * LIST_ROW_HEIGHT + (LIST_VISIBLE_ROWS - 1.0) * LIST_ROW_GAP;
+        assert_eq!(visible_network_rows(0), 1);
+        assert_eq!(visible_network_rows(3), 3);
+        assert_eq!(
+            visible_network_rows(LIST_MAX_VISIBLE_ROWS),
+            LIST_MAX_VISIBLE_ROWS
+        );
+        assert_eq!(
+            visible_network_rows(LIST_MAX_VISIBLE_ROWS + 1),
+            LIST_MAX_VISIBLE_ROWS
+        );
 
+        let expected = 3.0 * LIST_ROW_HEIGHT + 2.0 * LIST_ROW_GAP;
+        assert!((network_list_height(3) - expected).abs() < 0.01);
         assert!(
-            (LIST_HEIGHT - expected).abs() < 0.01,
-            "the list height drifted from its rows"
+            network_list_height(LIST_MAX_VISIBLE_ROWS + 1)
+                < (LIST_MAX_VISIBLE_ROWS + 1) as f32 * LIST_ROW_HEIGHT
         );
 
         // a row has to hold the icon and a line of text

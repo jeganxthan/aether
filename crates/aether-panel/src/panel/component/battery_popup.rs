@@ -1,13 +1,13 @@
+use super::battery_menu;
+use aether::{
+    Align, Animation, Canvas, Color, Easing, Horizontal, InputArea, Layer, LayerWindow, Margin,
+    Padding, Parent, Path, Rectangle, Row, Shape, Size, Stack, Start, Text, Vertical, Weight,
+    Widget, Zone, children,
+};
+use aether_services::battery::info::{BatteryStatus, format_duration};
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Mutex, OnceLock};
 use std::time::Duration;
-
-use aether::{
-    Align, Animation, Canvas, Color, Easing, Horizontal, InputArea, Layer, LayerWindow, Margin,
-    Padding, Parent, Path, Rectangle, Row, Shadow, Shape, Stack, Start, Text, Vertical, Weight,
-    Zone, children,
-};
-use aether_services::battery::info::{BatteryStatus, format_duration};
 
 use crate::panel::svg::battery_svg::BatteryIcon;
 use crate::panel::top::PANEL_HEIGHT;
@@ -18,39 +18,21 @@ const WINDOW_WIDTH: f32 = 330.0;
 const WINDOW_HEIGHT: f32 = 52.0;
 const EDGE_INSET_RIGHT: f32 = 12.0;
 
-const MIN_BODY_WIDTH: f32 = 42.0;
-const MAX_BODY_WIDTH: f32 = 210.0;
-const ISLAND_HEIGHT: f32 = 40.0;
+pub(super) const COLLAPSED_BODY_WIDTH: f32 = 42.0;
+pub(super) const ISLAND_HEIGHT: f32 = 40.0;
 const EAR_RADIUS: f32 = 13.0;
 const CORNER_RADIUS: f32 = 14.0;
 
 const ICON_BADGE_SIZE: f32 = 22.0;
 const ICON_SIZE: f32 = 14.0;
 
-const ANIMATION_DURATION: Duration = Duration::from_millis(220);
-const HOVER_DELAY: Duration = Duration::from_millis(140);
+const ANIMATION_DURATION: Duration = super::popup_motion::EXPANSION_DURATION;
 static PROGRESS: OnceLock<Mutex<Animation<f32>>> = OnceLock::new();
 static HOVERED: AtomicBool = AtomicBool::new(false);
 static HOVER_GENERATION: AtomicU64 = AtomicU64::new(0);
 
 pub fn set_hovered(hovered: bool) {
-    if hovered {
-        HOVER_GENERATION.fetch_add(1, Ordering::Relaxed);
-        if !HOVERED.swap(true, Ordering::Relaxed) {
-            aether::refresh();
-        }
-        return;
-    }
-
-    let generation = HOVER_GENERATION.fetch_add(1, Ordering::Relaxed) + 1;
-    crate::services::runtime::runtime().spawn(async move {
-        tokio::time::sleep(HOVER_DELAY).await;
-        if HOVER_GENERATION.load(Ordering::Relaxed) == generation
-            && HOVERED.swap(false, Ordering::Relaxed)
-        {
-            aether::refresh();
-        }
-    });
+    super::popup_motion::set_hovered(hovered, &HOVERED, &HOVER_GENERATION);
 }
 
 pub fn hovered() -> bool {
@@ -75,6 +57,7 @@ fn progress() -> f32 {
 
 pub fn battery_hint() -> LayerWindow {
     let progress = progress();
+    let menu_open = battery_menu::open();
     let window = LayerWindow::new()
         .width(WINDOW_WIDTH)
         .height(WINDOW_HEIGHT)
@@ -94,31 +77,33 @@ pub fn battery_hint() -> LayerWindow {
         return window.click_through().child(blank());
     };
 
-    if progress <= 0.001 && !hovered() {
+    if (progress <= 0.001 && !hovered() && !menu_open)
+        || (menu_open && (!hovered() || progress <= 0.001))
+    {
         return window.click_through().child(blank());
     }
 
     let theme = theme();
-    let current_height = (ISLAND_HEIGHT * progress).max(2.0);
-    let current_body_width = MIN_BODY_WIDTH + (MAX_BODY_WIDTH - MIN_BODY_WIDTH) * progress;
-    let current_ear_radius = (EAR_RADIUS * progress).min(current_height * 0.44);
-    let current_corner_radius = (CORNER_RADIUS * progress).min(current_height * 0.44);
-    let current_width = current_body_width + 2.0 * current_ear_radius;
-
-    let charging = battery.status == BatteryStatus::Charging;
-    let estimate = match battery.status {
-        BatteryStatus::Discharging => battery
-            .remaining_time
-            .map(|time| format!("{} remaining", format_duration(time)))
-            .unwrap_or_else(|| "On battery".to_string()),
-        BatteryStatus::Charging => battery
-            .time_to_full
-            .map(|time| format!("{} to full", format_duration(time)))
-            .unwrap_or_else(|| "Charging".to_string()),
-        BatteryStatus::Full => "Fully charged".to_string(),
-        BatteryStatus::NotCharging => "Not charging".to_string(),
-        BatteryStatus::Unknown => "Battery".to_string(),
+    let handoff = if menu_open {
+        battery_menu::transition_progress()
+    } else {
+        0.0
     };
+    let charging = battery.status == BatteryStatus::Charging;
+    let estimate = battery_estimate(&battery);
+
+    let estimate_text = Text::new(estimate)
+        .font("Maple Mono")
+        .color(theme.text_muted)
+        .size(11.0)
+        .weight(Weight::Medium);
+    let (
+        current_width,
+        current_height,
+        current_body_width,
+        current_ear_radius,
+        current_corner_radius,
+    ) = island_metrics(&battery, progress);
 
     let badge = Rectangle::new()
         .width(ICON_BADGE_SIZE)
@@ -140,12 +125,7 @@ pub fn battery_hint() -> LayerWindow {
             .width(8.0)
             .height(1.0)
             .fill(Color::TRANSPARENT),
-        Text::new(estimate)
-            .font("Maple Mono")
-            .color(theme.text_muted)
-            .size(11.0)
-            .weight(Weight::Medium)
-            .elide(),
+        estimate_text,
     ])
     .width(Parent)
     .height(current_height)
@@ -160,7 +140,7 @@ pub fn battery_hint() -> LayerWindow {
             current_corner_radius,
         )
         .fill(theme.bar)
-        .opacity(progress),
+        .opacity(progress * (1.0 - handoff)),
     ) as Box<dyn Shape>;
     let border = Box::new(
         build_island_border_path(
@@ -170,7 +150,7 @@ pub fn battery_hint() -> LayerWindow {
             current_corner_radius,
         )
         .stroke(1.0, theme.surface_border)
-        .opacity(progress),
+        .opacity(progress * (1.0 - handoff)),
     ) as Box<dyn Shape>;
     let canvas = Canvas::new()
         .width(current_width)
@@ -197,19 +177,14 @@ pub fn battery_hint() -> LayerWindow {
                     .radius_bottom_left(current_corner_radius)
                     .radius_bottom_right(current_corner_radius)
                     .fill(Color::TRANSPARENT)
-                    .shadow(
-                        Shadow::drop(theme.shadow)
-                            .opacity(0.35 * progress)
-                            .blur(14.0)
-                            .offset(0.0, 4.0),
-                    ),
+                    .shadow(super::island_shadow(0.35 * progress * (1.0 - handoff)),),
             ),
         canvas,
         Rectangle::new()
             .width(current_width)
             .height(current_height)
             .fill(Color::TRANSPARENT)
-            .opacity(content_opacity)
+            .opacity(content_opacity * (1.0 - handoff))
             .padding(Padding {
                 top: 0.0,
                 right: current_ear_radius + 12.0,
@@ -224,7 +199,9 @@ pub fn battery_hint() -> LayerWindow {
         .width(current_width)
         .height(current_height)
         .fill(Color::TRANSPARENT)
+        .cursor(aether::Cursor::Pointer)
         .on_hover(set_hovered)
+        .on_click(|_| battery_menu::toggle_open())
         .child(island);
 
     let input = InputArea {
@@ -251,11 +228,64 @@ pub fn battery_hint() -> LayerWindow {
     )
 }
 
+pub(super) fn battery_estimate(battery: &aether_services::battery::info::Battery) -> String {
+    match battery.status {
+        BatteryStatus::Discharging => battery
+            .remaining_time
+            .map(|time| format!("{} remaining", format_duration(time)))
+            .unwrap_or_else(|| "On battery".to_string()),
+        BatteryStatus::Charging => battery
+            .time_to_full
+            .map(|time| format!("{} to full", format_duration(time)))
+            .unwrap_or_else(|| "Charging".to_string()),
+        BatteryStatus::Full => "Fully charged".to_string(),
+        BatteryStatus::NotCharging => "Not charging".to_string(),
+        BatteryStatus::Unknown => "Battery".to_string(),
+    }
+}
+
 fn blank() -> Rectangle {
     Rectangle::new()
         .width(Parent)
         .height(Parent)
         .fill(Color::TRANSPARENT)
+}
+
+fn estimate_body_width(text: &Text) -> f32 {
+    ICON_BADGE_SIZE + 8.0 + intrinsic_text_width(text) + 24.0
+}
+
+pub(super) fn current_island_metrics(
+    battery: &aether_services::battery::info::Battery,
+) -> (f32, f32, f32, f32) {
+    let progress = progress();
+    let (width, height, _, ear, corner) = island_metrics(battery, progress);
+    (width, height, ear, corner)
+}
+
+fn island_metrics(
+    battery: &aether_services::battery::info::Battery,
+    progress: f32,
+) -> (f32, f32, f32, f32, f32) {
+    let height = (ISLAND_HEIGHT * progress).max(2.0);
+    let text = Text::new(battery_estimate(battery))
+        .font("Maple Mono")
+        .size(11.0)
+        .weight(Weight::Medium);
+    let target_body_width = estimate_body_width(&text);
+    let body_width = COLLAPSED_BODY_WIDTH + (target_body_width - COLLAPSED_BODY_WIDTH) * progress;
+    let ear = (EAR_RADIUS * progress).min(height * 0.44);
+    let corner = (CORNER_RADIUS * progress).min(height * 0.44);
+
+    (body_width + 2.0 * ear, height, body_width, ear, corner)
+}
+
+fn intrinsic_text_width(text: &Text) -> f32 {
+    let Size::Fixed(text_width) = text.width() else {
+        unreachable!("battery estimate text must have intrinsic width");
+    };
+
+    text_width
 }
 
 fn build_island_path(width: f32, height: f32, ear_radius: f32, bottom_radius: f32) -> Path {
@@ -294,6 +324,29 @@ fn build_island_path(width: f32, height: f32, ear_radius: f32, bottom_radius: f3
         )
         .line_to(0.0, 0.0)
         .close()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn estimate_width_tracks_the_rendered_text_width() {
+        let short = Text::new("Charging")
+            .font("Maple Mono")
+            .size(11.0)
+            .weight(Weight::Medium);
+        let long = Text::new("3 hours 25 minutes to full")
+            .font("Maple Mono")
+            .size(11.0)
+            .weight(Weight::Medium);
+
+        assert!(estimate_body_width(&long) > estimate_body_width(&short));
+        assert_eq!(
+            estimate_body_width(&long) - estimate_body_width(&short),
+            intrinsic_text_width(&long) - intrinsic_text_width(&short)
+        );
+    }
 }
 
 fn build_island_border_path(width: f32, height: f32, ear_radius: f32, bottom_radius: f32) -> Path {

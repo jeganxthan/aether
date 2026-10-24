@@ -1,8 +1,4 @@
-
-use std::{
-    io,
-    process::Command,
-};
+use std::{io, process::Command};
 
 const AUDIO_SINK: &str = "@DEFAULT_AUDIO_SINK@";
 
@@ -52,6 +48,18 @@ impl AudioService {
 
     pub fn toggle_mute() -> io::Result<AudioState> {
         Self::run(&["set-mute", AUDIO_SINK, "toggle"])?;
+        Self::current()
+    }
+
+    pub fn set_volume(percent: u8) -> io::Result<AudioState> {
+        let percent = percent.min(100).to_string();
+        Self::run(&[
+            "set-volume",
+            "-l",
+            "1.0",
+            AUDIO_SINK,
+            &format!("{percent}%"),
+        ])?;
         Self::current()
     }
 

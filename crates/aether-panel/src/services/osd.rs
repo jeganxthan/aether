@@ -72,10 +72,7 @@ fn state() -> &'static Mutex<State> {
 pub fn shown() -> Option<Shown> {
     start();
 
-    state()
-        .lock()
-        .unwrap_or_else(PoisonError::into_inner)
-        .shown
+    state().lock().unwrap_or_else(PoisonError::into_inner).shown
 }
 
 // sets how far the display has slid, driven by the watcher
@@ -216,10 +213,7 @@ async fn animate() {
             let mut state = state().lock().unwrap_or_else(PoisonError::into_inner);
 
             // the moment the display has sat long enough to start leaving
-            let hide_now = state
-                .shown
-                .as_ref()
-                .is_some_and(|shown| !shown.leaving)
+            let hide_now = state.shown.as_ref().is_some_and(|shown| !shown.leaving)
                 && state.hide_at.is_some_and(|at| Instant::now() >= at);
 
             if hide_now && let Some(shown) = state.shown.as_mut() {

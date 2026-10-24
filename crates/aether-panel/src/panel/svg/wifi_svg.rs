@@ -27,27 +27,17 @@ impl WifiSignalIcon {
 
     pub fn asset_name(self, secured: bool) -> &'static str {
         match (self, secured) {
-            (Self::Excellent, true) =>
-                "network-wireless-secure-signal-excellent-symbolic.svg",
-            (Self::Good, true) =>
-                "network-wireless-secure-signal-good-symbolic.svg",
-            (Self::Ok, true) =>
-                "network-wireless-secure-signal-ok-symbolic.svg",
-            (Self::Weak, true) =>
-                "network-wireless-secure-signal-weak-symbolic.svg",
-            (Self::None, true) =>
-                "network-wireless-secure-signal-none-symbolic.svg",
+            (Self::Excellent, true) => "network-wireless-secure-signal-excellent-symbolic.svg",
+            (Self::Good, true) => "network-wireless-secure-signal-good-symbolic.svg",
+            (Self::Ok, true) => "network-wireless-secure-signal-ok-symbolic.svg",
+            (Self::Weak, true) => "network-wireless-secure-signal-weak-symbolic.svg",
+            (Self::None, true) => "network-wireless-secure-signal-none-symbolic.svg",
 
-            (Self::Excellent, false) =>
-                "network-wireless-signal-excellent-symbolic.svg",
-            (Self::Good, false) =>
-                "network-wireless-signal-good-symbolic.svg",
-            (Self::Ok, false) =>
-                "network-wireless-signal-ok-symbolic.svg",
-            (Self::Weak, false) =>
-                "network-wireless-signal-weak-symbolic.svg",
-            (Self::None, false) =>
-                "network-wireless-signal-none-symbolic.svg",
+            (Self::Excellent, false) => "network-wireless-signal-excellent-symbolic.svg",
+            (Self::Good, false) => "network-wireless-signal-good-symbolic.svg",
+            (Self::Ok, false) => "network-wireless-signal-ok-symbolic.svg",
+            (Self::Weak, false) => "network-wireless-signal-weak-symbolic.svg",
+            (Self::None, false) => "network-wireless-signal-none-symbolic.svg",
         }
     }
 

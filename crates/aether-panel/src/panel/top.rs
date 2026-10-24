@@ -25,11 +25,11 @@ const BATTERY_ICON_SIZE: f32 = 14.0;
 
 const WIFI_HIT_WIDTH: f32 = 22.0;
 
-// a roomier gap between the wifi and battery icons, adjusted for the wider hit area
-const ICON_GAP: f32 = 10.0;
+// Keep the player, wifi, and battery icon groups visually separated.
+const ICON_GAP: f32 = 14.0;
 
 // a tighter gap between the percentage and the icon it belongs to
-const PERCENT_GAP: f32 = 4.0;
+const PERCENT_GAP: f32 = 6.0;
 
 // the gap between the date and the time in the centered clock
 const CLOCK_GAP: f32 = 8.0;
@@ -72,18 +72,13 @@ pub fn panel() -> LayerWindow {
 
     let mut right_items: Vec<Box<dyn Widget>> = Vec::new();
 
-    // If an MPRIS player (Brave, Spotify, Google Chrome) is playing/active, show its SVG icon
+    // Keep the active player's brand icon visible in the panel.
     if let Some(p) = active_player {
-        let player_active = player_popup::hovered();
         right_items.push(Box::new(
             Rectangle::new()
                 .width(PLAYER_HIT_WIDTH)
                 .height(Parent)
-                .fill(if player_active {
-                    aether::Color::BLACK
-                } else {
-                    aether::Color::TRANSPARENT
-                })
+                .fill(Color::TRANSPARENT)
                 .cursor(Cursor::Pointer)
                 .align_child(Align::Center, Align::Center)
                 .on_hover(player_popup::set_hovered)
@@ -99,7 +94,23 @@ pub fn panel() -> LayerWindow {
             Rectangle::new().width(ICON_GAP).height(1.0).fill(theme.bar),
         ));
     }
-
+    let clipboard_icon = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("../../assets/icons/panel/clipboard.svg");
+    right_items.push(Box::new(
+        Rectangle::new()
+            .width(PLAYER_HIT_WIDTH)
+            .height(Parent)
+            .fill(Color::TRANSPARENT)
+            .cursor(Cursor::Pointer)
+            .align_child(Align::Center, Align::Center)
+            .on_click(|_| crate::panel::component::clipboard_popup::toggle())
+            .child(Rectangle::new().width(ICON_SIZE).height(ICON_SIZE).fill(
+                crate::panel::svg::recolor::ink_image(clipboard_icon, theme.icon),
+            )),
+    ));
+    right_items.push(Box::new(
+        Rectangle::new().width(6.0).height(1.0).fill(theme.bar),
+    ));
     // Wifi icon
     let wifi_active = hovered() || open();
     right_items.push(Box::new(
@@ -119,24 +130,44 @@ pub fn panel() -> LayerWindow {
                 aether::refresh();
             })
             .child(
-                Rectangle::new().width(ICON_SIZE).height(ICON_SIZE).fill(
-                    if ethernet {
+                Rectangle::new()
+                    .width(ICON_SIZE)
+                    .height(ICON_SIZE)
+                    .fill(if ethernet {
                         let path = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
                             .join("../../assets/icons/wifi/network-wired-symbolic.svg");
 
                         crate::panel::svg::recolor::ink_image(path, theme.icon)
                     } else {
                         wifi_icon.image(wifi_secured)
-                    },
-                ),
+                    }),
             ),
     ));
 
-    // small gap between wifi and battery icons
+    // small gap between wifi and bluetooth icons
     right_items.push(Box::new(
-        Rectangle::new().width(ICON_GAP).height(1.0).fill(theme.bar),
+        Rectangle::new()
+            .width(6.0)
+            .height(1.0)
+            .fill(theme.bar),
     ));
-
+    let bluetooth = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("../../assets/icons/panel/bluetooth.svg");
+    right_items.push(Box::new(
+        Rectangle::new()
+            .width(PLAYER_HIT_WIDTH)
+            .height(Parent)
+            .fill(Color::TRANSPARENT)
+            .cursor(Cursor::Pointer)
+            .align_child(Align::Center, Align::Center)
+            .on_click(|_| crate::panel::component::clipboard_popup::toggle())
+            .child(Rectangle::new().width(ICON_SIZE).height(ICON_SIZE).fill(
+                crate::panel::svg::recolor::ink_image(bluetooth, theme.icon),
+            )),
+    ));
+    right_items.push(Box::new(
+        Rectangle::new().width(6.0).height(1.0).fill(theme.bar),
+    ));
     // battery reading and icon
     let battery_item = match battery_icon {
         Some((icon, charging, percentage)) => Rectangle::new()
@@ -150,6 +181,7 @@ pub fn panel() -> LayerWindow {
             .cursor(Cursor::Pointer)
             .align_child(Align::End, Align::Center)
             .on_hover(battery_popup::set_hovered)
+            .on_click(|_| crate::panel::component::battery_menu::toggle_open())
             .child(
                 Row::new(children![
                     Text::new(format!("{percentage}%"))
@@ -176,6 +208,23 @@ pub fn panel() -> LayerWindow {
             .fill(Color::TRANSPARENT),
     };
     right_items.push(Box::new(battery_item));
+    right_items.push(Box::new(
+        Rectangle::new().width(ICON_GAP).height(1.0).fill(theme.bar),
+    ));
+
+    let settings_icon = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("../../assets/icons/panel/settings.svg");
+    right_items.push(Box::new(
+        Rectangle::new()
+            .width(PLAYER_HIT_WIDTH)
+            .height(Parent)
+            .fill(Color::TRANSPARENT)
+            .on_hover(crate::panel::component::settings_popup::set_hovered)
+            .align_child(Align::Center, Align::Center)
+            .child(Rectangle::new().width(ICON_SIZE).height(ICON_SIZE).fill(
+                crate::panel::svg::recolor::ink_image(settings_icon, theme.icon),
+            )),
+    ));
 
     LayerWindow::new()
         .width(Full)
@@ -210,7 +259,7 @@ pub fn panel() -> LayerWindow {
                                 .align_child(Align::Center, Align::Center)
                                 .on_hover(|hovered| {
                                     if hovered {
-                                        launcher::open_launcher();
+                                        launcher::open_launcher_on_hover();
                                     }
                                 })
                                 .on_click(|_| launcher::toggle())
@@ -221,12 +270,18 @@ pub fn panel() -> LayerWindow {
                         .align(Align::Center)
                         .justify(Start),
                         Row::new(children![
-                            Text::new(today).font("Maple Mono").color(theme.bar_text).size(CLOCK_SIZE),
+                            Text::new(today)
+                                .font("Maple Mono")
+                                .color(theme.bar_text)
+                                .size(CLOCK_SIZE),
                             Rectangle::new()
                                 .width(CLOCK_GAP)
                                 .height(1.0)
                                 .fill(theme.bar),
-                            Text::new(time).font("Maple Mono").color(theme.bar_text).size(CLOCK_SIZE),
+                            Text::new(time)
+                                .font("Maple Mono")
+                                .color(theme.bar_text)
+                                .size(CLOCK_SIZE),
                         ])
                         .width(Parent)
                         .height(Parent)

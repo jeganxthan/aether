@@ -68,12 +68,16 @@ pub fn seek_to(position_secs: u64) {
             return;
         }
         if let Ok(service) = PlayerService::new().await {
-            let current_position = service.current_player().await
+            let current_position = service
+                .current_player()
+                .await
                 .filter(|state| state.bus_name == current.bus_name)
                 .map(|state| state.position_secs)
                 .unwrap_or(current.position_secs);
             let difference = position_secs as i128 - current_position as i128;
-            let offset_us = difference.saturating_mul(1_000_000).clamp(i64::MIN as i128, i64::MAX as i128) as i64;
+            let offset_us = difference
+                .saturating_mul(1_000_000)
+                .clamp(i64::MIN as i128, i64::MAX as i128) as i64;
             let _ = service.seek(&current.bus_name, offset_us).await;
             trigger_refresh().await;
         }
@@ -84,6 +88,7 @@ async fn trigger_refresh() {
     tokio::time::sleep(Duration::from_millis(50)).await;
     if let Ok(service) = PlayerService::new().await {
         let new_state = service.current_player().await;
+        request_artwork(new_state.as_ref());
         if let Some(latest) = LATEST.get() {
             if let Ok(mut write) = latest.write() {
                 *write = new_state;
@@ -104,6 +109,7 @@ async fn refresh_loop() {
         ticker.tick().await;
 
         let reading = service.current_player().await;
+        request_artwork(reading.as_ref());
 
         let Some(latest) = LATEST.get() else {
             continue;
@@ -121,4 +127,25 @@ async fn refresh_loop() {
             wake();
         }
     }
+}
+
+fn request_artwork(state: Option<&PlayerState>) {
+    let Some(state) = state else {
+        return;
+    };
+    if state.local_art_path().is_some() {
+        return;
+    }
+    let Some(url) = state.metadata.art_url.clone() else {
+        return;
+    };
+
+    runtime().spawn(async move {
+        if aether_services::player::cache_remote_artwork(&url)
+            .await
+            .is_some()
+        {
+            wake();
+        }
+    });
 }

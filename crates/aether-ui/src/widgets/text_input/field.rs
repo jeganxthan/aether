@@ -54,11 +54,17 @@ impl Field {
     }
 
     fn erase_word(&mut self) -> bool {
-        if self.cursor == 0 { return false; }
+        if self.cursor == 0 {
+            return false;
+        }
         let chars: Vec<char> = self.text.chars().collect();
         let mut start = self.cursor;
-        while start > 0 && chars[start - 1].is_whitespace() { start -= 1; }
-        while start > 0 && !chars[start - 1].is_whitespace() { start -= 1; }
+        while start > 0 && chars[start - 1].is_whitespace() {
+            start -= 1;
+        }
+        while start > 0 && !chars[start - 1].is_whitespace() {
+            start -= 1;
+        }
         let from = chars.iter().take(start).collect::<String>().len();
         let to = chars.iter().take(self.cursor).collect::<String>().len();
         self.text.replace_range(from..to, "");

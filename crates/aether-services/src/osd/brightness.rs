@@ -1,10 +1,4 @@
-
-use std::{
-    fs,
-    io,
-    path::PathBuf,
-    process::Command,
-};
+use std::{fs, io, path::PathBuf, process::Command};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct BrightnessState {
@@ -56,6 +50,21 @@ impl BrightnessService {
 
     pub fn decrease() -> io::Result<BrightnessState> {
         Self::adjust("5%-")
+    }
+
+    pub fn set_percent(percent: u8) -> io::Result<BrightnessState> {
+        let percent = percent.min(100);
+        let output = Command::new("brightnessctl")
+            .args(["set", &format!("{percent}%")])
+            .output()?;
+
+        if !output.status.success() {
+            return Err(io::Error::other(
+                String::from_utf8_lossy(&output.stderr).trim().to_owned(),
+            ));
+        }
+
+        Self::current()
     }
 
     fn adjust(amount: &str) -> io::Result<BrightnessState> {

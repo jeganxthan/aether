@@ -7,3 +7,6 @@ edition = "2024"
 aether = { package = "aether-ui", path = "../../crates/aether-ui" }
 aether-services = { path = "../aether-services" }
 tokio = { version = "1", features = ["rt", "rt-multi-thread", "time", "net", "io-util"] }
+glib = "0.20"
+polkit-agent-rs = "0.3.0"
+zeroize = "1"

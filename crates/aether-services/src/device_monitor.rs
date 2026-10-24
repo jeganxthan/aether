@@ -1,4 +1,5 @@
 use std::{
+    fs,
     io,
     thread,
 };
@@ -129,6 +130,13 @@ async fn handle_event(connection: &Connection, event: &udev::Event) {
 
     let device_name = detect_device_name(event, subsystem, device_type);
 
+    // A charger (or other power event) can masquerade as a DRM hotplug on some
+    // machines. Only announce a display when an external display is actually
+    // reported as connected by the kernel.
+    if subsystem == "drm" && connected && !external_display_connected() {
+        return;
+    }
+
     let Some((title, body, icon)) = device_message(
         subsystem,
         device_type,
@@ -187,6 +195,41 @@ fn detect_device_name(
         }
         _ => "Device".to_string(),
     }
+}
+
+fn external_display_connected() -> bool {
+    let Ok(entries) = fs::read_dir("/sys/class/drm") else {
+        // If sysfs cannot be read, keep the previous behavior rather than
+        // dropping legitimate display notifications.
+        return true;
+    };
+
+    for entry in entries.flatten() {
+        let name = entry.file_name().to_string_lossy().to_string();
+
+        // Only connector entries look like "card0-HDMI-A-1".
+        if !name.contains('-') {
+            continue;
+        }
+
+        let lower = name.to_lowercase();
+        if lower.contains("edp")
+            || lower.contains("lvds")
+            || lower.contains("dsi")
+            || lower.contains("writeback")
+        {
+            continue;
+        }
+
+        let status_path = entry.path().join("status");
+        if let Ok(status) = fs::read_to_string(&status_path)
+            && status.trim() == "connected"
+        {
+            return true;
+        }
+    }
+
+    false
 }
 
 fn device_message(

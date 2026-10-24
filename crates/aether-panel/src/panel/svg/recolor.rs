@@ -55,7 +55,11 @@ pub fn ink(source: &Path, ink: Color) -> PathBuf {
     let hex = ink_hex(ink);
 
     // the color goes in the name so the two themes each get their own copy
-    let target = cache_dir().join(format!("{}.{}.svg", ink_stem(name), hex.trim_start_matches('#')));
+    let target = cache_dir().join(format!(
+        "{}.{}.svg",
+        ink_stem(name),
+        hex.trim_start_matches('#')
+    ));
 
     if target.exists() {
         return target;
@@ -84,9 +88,7 @@ pub fn ink(source: &Path, ink: Color) -> PathBuf {
 
 // the recolored icon, ready to hand to a view
 pub fn ink_image(source: impl AsRef<Path>, color: Color) -> Image {
-    
     Image::contain(ink(source.as_ref(), color))
-    
 }
 
 /*

@@ -1,12 +1,12 @@
 use std::path::PathBuf;
-use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, AtomicUsize, Ordering};
 use std::sync::{Mutex, OnceLock};
 use std::time::Duration;
 
 use aether::{
     Align, Animation, Canvas, Color, Column, Cursor, Easing, Horizontal, Image, Key, Keyboard,
-    Layer, LayerWindow, Padding, Parent, Path, Rectangle, Row, Shadow, Shape, Stack,
-    Start, Text, TextInput, Vertical, Weight, Widget, Zone, children,
+    Layer, LayerWindow, Padding, Parent, Path, Rectangle, Row, Shape, Stack, Start, Text,
+    TextInput, Vertical, Weight, Widget, Zone, children,
 };
 
 use crate::panel::svg::recolor;
@@ -57,7 +57,9 @@ fn launcher_animated_height(target: f32) -> f32 {
         )
     });
 
-    let mut anim = animation.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+    let mut anim = animation
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
     anim.to(target);
     anim.value()
 }
@@ -67,6 +69,9 @@ fn launcher_animated_height(target: f32) -> f32 {
 // ------------------------------------------------------------
 
 static OPEN: AtomicBool = AtomicBool::new(false);
+static HOVERED: AtomicBool = AtomicBool::new(false);
+static CLOSE_ON_UNHOVER: AtomicBool = AtomicBool::new(false);
+static HOVER_GENERATION: AtomicU64 = AtomicU64::new(0);
 static SELECTED_INDEX: AtomicUsize = AtomicUsize::new(0);
 static INDEX_LOADING: AtomicBool = AtomicBool::new(false);
 static INDEX_LOADED: AtomicBool = AtomicBool::new(false);
@@ -100,6 +105,30 @@ pub fn is_open() -> bool {
     OPEN.load(Ordering::Relaxed)
 }
 
+pub fn set_hovered(hovered: bool) {
+    if hovered {
+        if !HOVERED.swap(true, Ordering::Relaxed) {
+            HOVER_GENERATION.fetch_add(1, Ordering::Relaxed);
+        }
+        return;
+    }
+
+    if !HOVERED.swap(false, Ordering::Relaxed) {
+        return;
+    }
+
+    let generation = HOVER_GENERATION.fetch_add(1, Ordering::Relaxed) + 1;
+    crate::services::runtime::runtime().spawn(async move {
+        tokio::time::sleep(Duration::from_millis(140)).await;
+        if CLOSE_ON_UNHOVER.load(Ordering::Relaxed)
+            && HOVER_GENERATION.load(Ordering::Relaxed) == generation
+            && !HOVERED.load(Ordering::Relaxed)
+        {
+            close();
+        }
+    });
+}
+
 // ------------------------------------------------------------
 // Public Actions & Preloading
 // ------------------------------------------------------------
@@ -107,7 +136,9 @@ pub fn is_open() -> bool {
 pub fn preload() {
     let service = application_service();
     if !INDEX_LOADED.load(Ordering::Relaxed)
-        && INDEX_LOADING.compare_exchange(false, true, Ordering::Relaxed, Ordering::Relaxed).is_ok()
+        && INDEX_LOADING
+            .compare_exchange(false, true, Ordering::Relaxed, Ordering::Relaxed)
+            .is_ok()
     {
         crate::services::runtime::runtime().spawn(async move {
             let mut loaded_service = ApplicationService::default();
@@ -123,6 +154,17 @@ pub fn preload() {
 }
 
 pub fn open_launcher() {
+    open(false);
+}
+
+pub fn open_launcher_on_hover() {
+    open(true);
+}
+
+fn open(close_on_unhover: bool) {
+    CLOSE_ON_UNHOVER.store(close_on_unhover, Ordering::Relaxed);
+    HOVER_GENERATION.fetch_add(1, Ordering::Relaxed);
+    HOVERED.store(true, Ordering::Relaxed);
     preload();
     if let Ok(mut value) = search_state().lock() {
         value.clear();
@@ -143,6 +185,9 @@ pub fn toggle() {
 }
 
 pub fn close() {
+    CLOSE_ON_UNHOVER.store(false, Ordering::Relaxed);
+    HOVER_GENERATION.fetch_add(1, Ordering::Relaxed);
+    HOVERED.store(false, Ordering::Relaxed);
     if OPEN.swap(false, Ordering::Relaxed) {
         aether::refresh();
     }
@@ -255,7 +300,11 @@ pub fn launcher() -> LayerWindow {
     let is_open = is_open();
     let q = query();
     let has_query = !q.trim().is_empty();
-    let suggestions = if has_query { get_filtered_apps() } else { Vec::new() };
+    let suggestions = if has_query {
+        get_filtered_apps()
+    } else {
+        Vec::new()
+    };
 
     let target_height = if !is_open {
         0.0
@@ -264,7 +313,8 @@ pub fn launcher() -> LayerWindow {
     } else {
         let count = suggestions.len().min(MAX_SUGGESTIONS);
         let content_rows = if count == 0 { 1 } else { count };
-        let list_h = content_rows as f32 * ROW_HEIGHT + (content_rows.saturating_sub(1)) as f32 * ROW_GAP;
+        let list_h =
+            content_rows as f32 * ROW_HEIGHT + (content_rows.saturating_sub(1)) as f32 * ROW_GAP;
         COMPACT_HEIGHT + 7.0 + list_h
     };
 
@@ -278,7 +328,11 @@ pub fn launcher() -> LayerWindow {
         .layer(Layer::Overlay)
         .space(Zone::Ignore)
         .namespace("aether-launcher")
-        .keyboard(if is_open { Keyboard::Exclusive } else { Keyboard::None })
+        .keyboard(if is_open {
+            Keyboard::Exclusive
+        } else {
+            Keyboard::None
+        })
         .on_key(|key| match key {
             Key::Escape => close(),
             Key::Down => {
@@ -391,12 +445,7 @@ pub fn launcher() -> LayerWindow {
                     .radius_bottom_left(current_r_b)
                     .radius_bottom_right(current_r_b)
                     .fill(Color::TRANSPARENT)
-                    .shadow(
-                        Shadow::drop(theme.shadow)
-                            .opacity(0.35 * open_ratio)
-                            .blur(20.0)
-                            .offset(0.0, 8.0),
-                    ),
+                    .shadow(super::island_shadow(0.35 * open_ratio),),
             ),
         card,
     ]);
@@ -406,6 +455,18 @@ pub fn launcher() -> LayerWindow {
             .width(Parent)
             .height(Parent)
             .fill(Color::TRANSPARENT)
+            .on_hover(|inside| {
+                if !inside {
+                    set_hovered(false);
+                }
+            })
+            .on_move(move |point| {
+                let inside_launcher = point.x >= EDGE_INSET_LEFT
+                    && point.x <= EDGE_INSET_LEFT + TOTAL_WIDTH
+                    && point.y >= 0.0
+                    && point.y <= PANEL_HEIGHT + target_height;
+                set_hovered(inside_launcher);
+            })
             .on_click(|_| close())
             .child(
                 Rectangle::new()
@@ -429,8 +490,8 @@ pub fn launcher() -> LayerWindow {
 // ------------------------------------------------------------
 
 fn search_icon_image() -> Image {
-    let path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .join("../../assets/icons/launcher/search.svg");
+    let path =
+        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../assets/icons/launcher/search.svg");
     recolor::ink_image(path, theme().text_muted)
 }
 
@@ -559,7 +620,11 @@ fn suggestion_row(app: Application, is_selected: bool) -> Rectangle {
             .font("Maple Mono")
             .color(theme.text)
             .size(APP_NAME_SIZE)
-            .weight(if is_selected { Weight::SemiBold } else { Weight::Medium })
+            .weight(if is_selected {
+                Weight::SemiBold
+            } else {
+                Weight::Medium
+            })
             .elide(),
         Text::new(desc)
             .font("Maple Mono")
@@ -574,7 +639,10 @@ fn suggestion_row(app: Application, is_selected: bool) -> Rectangle {
     let mut row_children: Vec<Box<dyn Widget>> = Vec::new();
     row_children.push(Box::new(icon_tile));
     row_children.push(Box::new(
-        Rectangle::new().width(10.0).height(1.0).fill(Color::TRANSPARENT),
+        Rectangle::new()
+            .width(10.0)
+            .height(1.0)
+            .fill(Color::TRANSPARENT),
     ));
     row_children.push(Box::new(text_column));
 

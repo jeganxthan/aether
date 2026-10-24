@@ -3,8 +3,8 @@ use std::path::PathBuf;
 
 use aether::Rectangle;
 
-use crate::theme::theme;
 use crate::panel::svg::recolor::ink_image;
+use crate::theme::theme;
 
 const DISTRO_ICON_SIZE: f32 = 16.0;
 
@@ -28,8 +28,7 @@ fn distro_id() -> String {
 }
 
 fn distro_icon_path() -> PathBuf {
-    let assets = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .join("../../assets/icons/distro");
+    let assets = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../assets/icons/distro");
 
     let icon = match distro_id().as_str() {
         "void" => "void.svg",
@@ -49,5 +48,4 @@ pub fn distro_icon() -> Rectangle {
         .width(DISTRO_ICON_SIZE)
         .height(DISTRO_ICON_SIZE)
         .fill(ink_image(path, theme.icon))
-    
 }

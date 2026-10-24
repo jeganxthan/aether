@@ -74,10 +74,65 @@ if ((${#missing[@]})); then
     echo "    sudo xbps-install tesseract-ocr tesseract-ocr-eng"
 fi
 
+mkdir -p "$PREFIX"
+cat > "$PREFIX/aether-lock-screen" <<'PY'
+#!/usr/bin/env python3
+import os
+import socket
+import sys
+
+try:
+    socket_path = os.path.join(os.environ["XDG_RUNTIME_DIR"], "aether.sock")
+    with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as connection:
+        connection.connect(socket_path)
+        connection.sendall(b"lock\n")
+        connection.shutdown(socket.SHUT_WR)
+        response = connection.recv(4096).decode().strip()
+except (KeyError, OSError) as error:
+    print(f"Could not request Aether lock screen: {error}", file=sys.stderr)
+    sys.exit(1)
+
+if response != "locked":
+    print(f"Aether lock request failed: {response}", file=sys.stderr)
+    sys.exit(1)
+PY
+chmod 0755 "$PREFIX/aether-lock-screen"
+
+cat > "$PREFIX/aether-clipboard" <<'PY'
+#!/usr/bin/env python3
+import os
+import socket
+import sys
+
+action = sys.argv[1] if len(sys.argv) > 1 else "open"
+if action not in {"open", "close", "toggle", "pin"}:
+    print(f"Unknown clipboard action: {action}", file=sys.stderr)
+    sys.exit(2)
+
+try:
+    socket_path = os.path.join(os.environ["XDG_RUNTIME_DIR"], "aether.sock")
+    with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as connection:
+        connection.connect(socket_path)
+        connection.sendall(f"clipboard\n{action}\n".encode())
+        connection.shutdown(socket.SHUT_WR)
+        response = connection.recv(4096).decode().strip()
+except (KeyError, OSError) as error:
+    print(f"Could not request Aether clipboard: {error}", file=sys.stderr)
+    sys.exit(1)
+
+if response != "ok":
+    print(f"Aether clipboard request failed: {response}", file=sys.stderr)
+    sys.exit(1)
+PY
+chmod 0755 "$PREFIX/aether-clipboard"
+
 cat <<EOF
 
 ==> labwc keybinds (add these to ~/.config/labwc/rc.xml)
 
+    <keybind key="W-l"><action name="Execute" command="$PREFIX/aether-lock-screen" /></keybind>
+    <keybind key="W-c"><action name="Execute" command="$PREFIX/aether-clipboard open" /></keybind>
+    <keybind key="A-p"><action name="Execute" command="$PREFIX/aether-clipboard pin" /></keybind>
     <keybind key="W-s"><action name="Execute" command="$PREFIX/aether-full-screenshot" /></keybind>
     <keybind key="W-S-s"><action name="Execute" command="$PREFIX/aether-selective-screenshot" /></keybind>
     <keybind key="W-S-o"><action name="Execute" command="$PREFIX/aether-ocr" /></keybind>

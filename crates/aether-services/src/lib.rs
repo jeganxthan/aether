@@ -3,8 +3,10 @@ pub mod battery;
 pub mod notifications;
 pub mod osd;
 pub mod device_monitor;
-
+pub mod power;
 pub mod screen_utils;
+pub mod clipboard;
+pub mod bluetooth;
 
 pub use screen_utils::{
     full_screenshot,

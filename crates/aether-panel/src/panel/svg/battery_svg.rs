@@ -30,8 +30,7 @@ impl BatteryIcon {
     }
 
     pub fn asset_path(self, charging: bool, limited: bool) -> PathBuf {
-        let root = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-            .join("../../assets/icons/battery");
+        let root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../assets/icons/battery");
 
         let level = self.level;
 
@@ -51,9 +50,7 @@ impl BatteryIcon {
                 format!("aether-applet-battery-level-{level}-limited-symbolic.svg"),
                 format!("aether-applet-battery-level-{level}-symbolic.svg"),
             ],
-            (false, false) => vec![
-                format!("aether-applet-battery-level-{level}-symbolic.svg"),
-            ],
+            (false, false) => vec![format!("aether-applet-battery-level-{level}-symbolic.svg")],
         };
 
         candidates
@@ -71,7 +68,10 @@ impl BatteryIcon {
 
     /// Checks whether the selected image has finished loading.
     pub fn loaded(self, charging: bool, limited: bool) -> bool {
-        Image::loaded(recolor::ink(&self.asset_path(charging, limited), theme().icon))
+        Image::loaded(recolor::ink(
+            &self.asset_path(charging, limited),
+            theme().icon,
+        ))
     }
 }
 
