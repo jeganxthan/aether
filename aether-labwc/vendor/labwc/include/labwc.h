@@ -58,6 +58,8 @@ struct seat {
 
 	/* Used to hide the workspace OSD after switching workspaces */
 	struct wl_event_source *workspace_osd_timer;
+	struct wl_event_source *workspace_osd_animation_timer;
+	unsigned int workspace_osd_animation_frame;
 	bool workspace_osd_shown_by_modifier;
 
 	/* if set, views cannot receive focus */

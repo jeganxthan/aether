@@ -5,8 +5,8 @@ pub fn pick_color() -> Result<String, String> {
     let (x, y) = region::select_point()?;
     let png = capture::capture_point(x, y)?;
 
-    let image = image::load_from_memory(&png)
-        .map_err(|e| format!("Failed to decode screenshot: {e}"))?;
+    let image =
+        image::load_from_memory(&png).map_err(|e| format!("Failed to decode screenshot: {e}"))?;
 
     let rgba = image.to_rgba8();
     let pixel = rgba.get_pixel(0, 0);

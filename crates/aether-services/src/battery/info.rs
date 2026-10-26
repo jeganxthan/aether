@@ -58,6 +58,24 @@ pub fn battery() -> Option<Battery> {
     battery_from(Path::new("/sys/class/power_supply"), upower_estimate())
 }
 
+fn ac_online() -> bool {
+    let Ok(entries) = fs::read_dir("/sys/class/power_supply") else {
+        return false;
+    };
+
+    for entry in entries.flatten() {
+        let path = entry.path();
+        if read_string(&path, "type").as_deref() != Some("Mains") {
+            continue;
+        }
+        if read_u64(&path, "online") == Some(1) {
+            return true;
+        }
+    }
+
+    false
+}
+
 fn battery_from(root: &Path, upower: Option<UpowerEstimate>) -> Option<Battery> {
     let mut cells: Vec<BatteryCell> = fs::read_dir(root)
         .ok()?
@@ -94,7 +112,15 @@ fn battery_from(root: &Path, upower: Option<UpowerEstimate>) -> Option<Battery> 
         return None;
     }
 
-    let status = combined_status(&cells);
+    let mut status = combined_status(&cells);
+
+    // A charger can be connected while the battery reports "Not charging"
+    // (for example when a charge limit is reached). Treat that as connected
+    // so the shell does not claim the machine is running on battery.
+    if status == BatteryStatus::NotCharging && ac_online() {
+        status = BatteryStatus::Charging;
+    }
+
     Some(Battery {
         percentage: combined_percentage(&cells),
         status,

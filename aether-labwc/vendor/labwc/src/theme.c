@@ -626,9 +626,9 @@ theme_builtin(struct theme *theme)
 	parse_hexstr("#8cb4ff", theme->osd_window_switcher_preview_border_color[0]);
 	parse_hexstr("#16171d", theme->osd_window_switcher_preview_border_color[1]);
 
-	theme->osd_workspace_switcher_boxes_width = 30;
-	theme->osd_workspace_switcher_boxes_height = 26;
-	theme->osd_workspace_switcher_boxes_border_width = 2;
+	theme->osd_workspace_switcher_boxes_width = 24;
+	theme->osd_workspace_switcher_boxes_height = 18;
+	theme->osd_workspace_switcher_boxes_border_width = 1;
 
 	parse_hexstr("#16171df2", theme->osd_bg_color);
 	theme->osd_border_width = 1;

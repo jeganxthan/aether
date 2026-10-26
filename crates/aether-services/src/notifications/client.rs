@@ -25,6 +25,8 @@ trait Notifications {
         hints: &HashMap<String, OwnedValue>,
         expire_timeout: i32,
     ) -> zbus::Result<u32>;
+
+    fn close_notification(&self, id: u32) -> zbus::Result<()>;
 }
 
 // how long a published popup stays on screen, in milliseconds
@@ -43,11 +45,29 @@ pub async fn publish(
     publish_over(None, app_name, app_icon, summary, body).await
 }
 
+pub async fn close_notification(id: u32) -> Result<(), String> {
+    let connection = zbus::Connection::session()
+        .await
+        .map_err(|error| format!("Could not reach the session bus: {error}"))?;
+    let proxy = NotificationsProxy::new(&connection)
+        .await
+        .map_err(|error| format!("Could not reach the notification server: {error}"))?;
+    proxy
+        .close_notification(id)
+        .await
+        .map_err(|error| format!("The notification server refused the close request: {error}"))
+}
+
 /*
  * The same, for callers that are not inside a runtime already. It runs on a
  * thread of its own, so it also works from inside one.
  */
-pub fn publish_now(app_name: &str, app_icon: &str, summary: &str, body: &str) -> Result<u32, String> {
+pub fn publish_now(
+    app_name: &str,
+    app_icon: &str,
+    summary: &str,
+    body: &str,
+) -> Result<u32, String> {
     let app_name = app_name.to_string();
     let app_icon = app_icon.to_string();
     let summary = summary.to_string();

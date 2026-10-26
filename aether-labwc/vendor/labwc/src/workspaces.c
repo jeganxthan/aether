@@ -26,8 +26,25 @@
 #include "view.h"
 
 #define EXT_WORKSPACES_VERSION 1
+#define WORKSPACE_OSD_ANIMATION_FRAMES 10
+#define WORKSPACE_OSD_ANIMATION_INTERVAL_MS 16
+#define WORKSPACE_OSD_ANIMATION_OFFSET 12
 
 /* Internal helpers */
+static void
+rounded_rectangle(cairo_t *cairo, double x, double y, double width, double height,
+		double radius)
+{
+	const double half_pi = 1.5707963267948966;
+	const double pi = 3.1415926535897932;
+	cairo_new_sub_path(cairo);
+	cairo_arc(cairo, x + width - radius, y + radius, radius, -half_pi, 0);
+	cairo_arc(cairo, x + width - radius, y + height - radius, radius, 0, half_pi);
+	cairo_arc(cairo, x + radius, y + height - radius, radius, half_pi, pi);
+	cairo_arc(cairo, x + radius, y + radius, radius, pi, 3 * half_pi);
+	cairo_close_path(cairo);
+}
+
 static size_t
 parse_workspace_index(const char *name)
 {
@@ -66,8 +83,8 @@ _osd_update(void)
 	struct theme *theme = rc.theme;
 
 	/* Settings */
-	uint16_t margin = 10;
-	uint16_t padding = 2;
+	uint16_t margin = 14;
+	uint16_t padding = 6;
 	uint16_t rect_height = theme->osd_workspace_switcher_boxes_height;
 	uint16_t rect_width = theme->osd_workspace_switcher_boxes_width;
 	bool hide_boxes = theme->osd_workspace_switcher_boxes_width == 0 ||
@@ -77,7 +94,9 @@ _osd_update(void)
 	size_t workspace_count = wl_list_length(&server.workspaces.all);
 	uint16_t marker_width = workspace_count * (rect_width + padding) - padding;
 	uint16_t width = margin * 2 + (marker_width < 200 ? 200 : marker_width);
-	uint16_t height = margin * (hide_boxes ? 2 : 3) + rect_height + font_height(&rc.font_osd);
+	uint16_t height = hide_boxes
+		? margin * 2 + font_height(&rc.font_osd)
+		: margin * 2 + rect_height + 10 + font_height(&rc.font_osd);
 
 	cairo_t *cairo;
 	cairo_surface_t *surface;
@@ -97,38 +116,37 @@ _osd_update(void)
 
 		cairo = cairo_create(buffer->surface);
 
-		/* Background */
+		/* Rounded Aether surface */
 		set_cairo_color(cairo, theme->osd_bg_color);
-		cairo_rectangle(cairo, 0, 0, width, height);
+		rounded_rectangle(cairo, 0, 0, width, height, 14);
 		cairo_fill(cairo);
 
-		/* Border */
+		/* Subtle surface border */
 		set_cairo_color(cairo, theme->osd_border_color);
-		struct wlr_fbox border_fbox = {
-			.width = width,
-			.height = height,
-		};
-		draw_cairo_border(cairo, border_fbox, theme->osd_border_width);
+		cairo_set_line_width(cairo, theme->osd_border_width);
+		rounded_rectangle(cairo, theme->osd_border_width / 2.0,
+			theme->osd_border_width / 2.0,
+			width - theme->osd_border_width,
+			height - theme->osd_border_width, 14);
+		cairo_stroke(cairo);
 
-		/* Boxes */
+		/* Workspace markers */
 		uint16_t x;
 		if (!hide_boxes) {
 			x = (width - marker_width) / 2;
 			wl_list_for_each(workspace, &server.workspaces.all, link) {
 				bool active = workspace == server.workspaces.current;
-				set_cairo_color(cairo, rc.theme->osd_label_text_color);
-				struct wlr_fbox fbox = {
-					.x = x,
-					.y = margin,
-					.width = rect_width,
-					.height = rect_height,
-				};
-				draw_cairo_border(cairo, fbox,
-					theme->osd_workspace_switcher_boxes_border_width);
+				rounded_rectangle(cairo, x, margin, rect_width, rect_height, 6);
 				if (active) {
-					cairo_rectangle(cairo, x, margin,
-						rect_width, rect_height);
+					cairo_set_source_rgba(cairo, 0.55, 0.71, 1.0, 0.95);
 					cairo_fill(cairo);
+				} else {
+					cairo_set_source_rgba(cairo, 1.0, 1.0, 1.0, 0.035);
+					cairo_fill_preserve(cairo);
+					cairo_set_source_rgba(cairo, 1.0, 1.0, 1.0, 0.18);
+					cairo_set_line_width(cairo,
+						theme->osd_workspace_switcher_boxes_border_width);
+					cairo_stroke(cairo);
 				}
 				x += rect_width + padding;
 			}
@@ -140,17 +158,17 @@ _osd_update(void)
 		pango_context_set_round_glyph_positions(pango_layout_get_context(layout), false);
 		pango_layout_set_ellipsize(layout, PANGO_ELLIPSIZE_END);
 
-		/* Center workspace indicator on the x axis */
-		int req_width = font_width(&rc.font_osd, server.workspaces.current->name);
+		struct font label_font = rc.font_osd;
+		label_font.weight = PANGO_WEIGHT_BOLD;
+		int req_width = font_width(&label_font, server.workspaces.current->name);
 		req_width = MIN(req_width, width - 2 * margin);
 		x = (width - req_width) / 2;
 		if (!hide_boxes) {
-			cairo_move_to(cairo, x, margin * 2 + rect_height);
+			cairo_move_to(cairo, x, margin + rect_height + 10);
 		} else {
-			cairo_move_to(cairo, x, (height - font_height(&rc.font_osd)) / 2.0);
+			cairo_move_to(cairo, x, (height - font_height(&label_font)) / 2.0);
 		}
-		PangoFontDescription *desc = font_to_pango_desc(&rc.font_osd);
-		//pango_font_description_set_weight(desc, PANGO_WEIGHT_BOLD);
+		PangoFontDescription *desc = font_to_pango_desc(&label_font);
 		pango_layout_set_font_description(layout, desc);
 		pango_layout_set_width(layout, req_width * PANGO_SCALE);
 		pango_font_description_free(desc);
@@ -170,9 +188,10 @@ _osd_update(void)
 		struct wlr_box output_box;
 		wlr_output_layout_get_box(server.output_layout,
 			output->wlr_output, &output_box);
-		int lx = output_box.x + (output_box.width - width) / 2;
-		int ly = output_box.y + (output_box.height - height) / 2;
-		wlr_scene_node_set_position(&output->workspace_osd->node, lx, ly);
+		output->workspace_osd_target_x = output_box.x + (output_box.width - width) / 2;
+		output->workspace_osd_target_y = output_box.y + (output_box.height - height) / 2;
+		wlr_scene_node_set_position(&output->workspace_osd->node,
+			output->workspace_osd_target_x, output->workspace_osd_target_y);
 		wlr_scene_buffer_set_buffer(output->workspace_osd, &buffer->base);
 		wlr_scene_buffer_set_dest_size(output->workspace_osd,
 			buffer->logical_width, buffer->logical_height);
@@ -356,6 +375,33 @@ _osd_handle_timeout(void *data)
 	return 0;
 }
 
+static int
+_osd_handle_animation(void *data)
+{
+	struct seat *seat = data;
+	seat->workspace_osd_animation_frame++;
+	double progress = (double)seat->workspace_osd_animation_frame
+		/ WORKSPACE_OSD_ANIMATION_FRAMES;
+	double remaining = 1.0 - progress;
+	int offset = WORKSPACE_OSD_ANIMATION_OFFSET * remaining * remaining * remaining;
+
+	struct output *output;
+	wl_list_for_each(output, &server.outputs, link) {
+		if (output->workspace_osd && output_is_usable(output)) {
+			wlr_scene_node_set_position(&output->workspace_osd->node,
+				output->workspace_osd_target_x,
+				output->workspace_osd_target_y + offset);
+		}
+	}
+
+	if (seat->workspace_osd_animation_frame < WORKSPACE_OSD_ANIMATION_FRAMES) {
+		wl_event_source_timer_update(seat->workspace_osd_animation_timer,
+			WORKSPACE_OSD_ANIMATION_INTERVAL_MS);
+	}
+
+	return 0;
+}
+
 static void
 _osd_show(void)
 {
@@ -369,6 +415,26 @@ _osd_show(void)
 		if (output_is_usable(output) && output->workspace_osd) {
 			wlr_scene_node_set_enabled(&output->workspace_osd->node, true);
 		}
+	}
+	struct seat *seat = &server.seat;
+	if (!seat->workspace_osd_animation_timer) {
+		seat->workspace_osd_animation_timer = wl_event_loop_add_timer(
+			server.wl_event_loop, _osd_handle_animation, seat);
+		if (!seat->workspace_osd_animation_timer) {
+			wlr_log(WLR_ERROR, "Failed to create workspace OSD animation timer");
+		}
+	}
+	if (seat->workspace_osd_animation_timer) {
+		seat->workspace_osd_animation_frame = 0;
+		wl_list_for_each(output, &server.outputs, link) {
+			if (output_is_usable(output) && output->workspace_osd) {
+				wlr_scene_node_set_position(&output->workspace_osd->node,
+					output->workspace_osd_target_x,
+					output->workspace_osd_target_y + WORKSPACE_OSD_ANIMATION_OFFSET);
+			}
+		}
+		wl_event_source_timer_update(seat->workspace_osd_animation_timer,
+			WORKSPACE_OSD_ANIMATION_INTERVAL_MS);
 	}
 	if (keyboard_get_all_modifiers(&server.seat)) {
 		/* Hidden by release of all modifiers */
@@ -504,6 +570,10 @@ void
 workspaces_osd_hide(struct seat *seat)
 {
 	assert(seat);
+	if (seat->workspace_osd_animation_timer) {
+		wl_event_source_remove(seat->workspace_osd_animation_timer);
+		seat->workspace_osd_animation_timer = NULL;
+	}
 	struct output *output;
 	wl_list_for_each(output, &server.outputs, link) {
 		if (!output->workspace_osd) {
@@ -628,6 +698,10 @@ workspaces_reconfigure(void)
 void
 workspaces_destroy(void)
 {
+	if (server.seat.workspace_osd_animation_timer) {
+		wl_event_source_remove(server.seat.workspace_osd_animation_timer);
+		server.seat.workspace_osd_animation_timer = NULL;
+	}
 	struct workspace *workspace, *tmp;
 	wl_list_for_each_safe(workspace, tmp, &server.workspaces.all, link) {
 		destroy_workspace(workspace);

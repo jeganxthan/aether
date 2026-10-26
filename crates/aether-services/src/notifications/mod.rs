@@ -1,10 +1,10 @@
+pub mod battery_alerts;
+pub mod client;
 pub mod dbus;
 pub mod model;
-pub mod battery_alerts;
 pub mod wifi_alerts;
-pub mod client;
 pub use battery_alerts::start_battery_alerts;
-pub use wifi_alerts::start_wifi_alerts;
-pub use client::{publish, publish_now};
+pub use client::{close_notification, publish, publish_now};
 pub use dbus::NotificationService;
 pub use model::{Notification, NotificationEvent};
+pub use wifi_alerts::start_wifi_alerts;

@@ -67,19 +67,22 @@ fn bluetooth_cache() -> &'static RwLock<Option<bool>> {
     BLUETOOTH.get_or_init(|| RwLock::new(None))
 }
 
-fn bluetooth_state() -> Option<bool> {
+pub fn bluetooth_state() -> Option<bool> {
     BLUETOOTH_WATCHER.get_or_init(|| {
         runtime().spawn(async {
             let mut ticker = tokio::time::interval(Duration::from_secs(3));
             loop {
                 ticker.tick().await;
-                if !HOVERED.load(Ordering::Relaxed) {
-                    continue;
-                }
-                let state = tokio::task::spawn_blocking(aether_services::bluetooth::powered)
-                    .await
-                    .ok()
-                    .and_then(Result::ok);
+                let state = tokio::task::spawn_blocking(|| {
+                    let rt = tokio::runtime::Builder::new_current_thread()
+                        .enable_all()
+                        .build()
+                        .unwrap();
+                    rt.block_on(aether_services::bluetooth::power::is_powered())
+                })
+                .await
+                .ok()
+                .and_then(Result::ok);
                 if let Ok(mut cached) = bluetooth_cache().write()
                     && *cached != state
                 {
@@ -95,7 +98,11 @@ fn bluetooth_state() -> Option<bool> {
 
 fn toggle_bluetooth() {
     runtime().spawn(async move {
-        let result = tokio::task::spawn_blocking(aether_services::bluetooth::toggle_power).await;
+        let result = tokio::task::spawn_blocking(|| {
+            tokio::runtime::Handle::current()
+                .block_on(aether_services::bluetooth::power::toggle_power())
+        })
+        .await;
 
         match result {
             Ok(Ok(enabled)) => {
@@ -385,7 +392,12 @@ fn controls() -> Column {
         .align(Align::Center)
         .justify(aether::Center),
         Row::new(children![
-            status_badge("panel/moon.svg", true),
+            toggle_control(
+                "panel/moon.svg",
+                crate::services::notifications::do_not_disturb(),
+                true,
+                crate::services::notifications::toggle_do_not_disturb,
+            ),
             status_badge("panel/plane.svg", true),
         ])
         .width(Parent)

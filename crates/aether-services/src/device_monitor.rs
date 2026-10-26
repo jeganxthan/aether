@@ -1,14 +1,6 @@
-use std::{
-    fs,
-    io,
-    thread,
-};
+use std::{fs, io, thread};
 
-use tokio::{
-    io::Interest,
-    io::unix::AsyncFd,
-    runtime::Builder,
-};
+use tokio::{io::Interest, io::unix::AsyncFd, runtime::Builder};
 use zbus::{Connection, Proxy};
 use zvariant::OwnedValue;
 
@@ -154,20 +146,13 @@ async fn handle_event(connection: &Connection, event: &udev::Event) {
     }
 }
 
-fn detect_device_name(
-    device: &udev::Device,
-    subsystem: &str,
-    device_type: &str,
-) -> String {
+fn detect_device_name(device: &udev::Device, subsystem: &str, device_type: &str) -> String {
     if subsystem == "drm" {
         return "External display".to_string();
     }
 
     for key in ["ID_MODEL_FROM_DATABASE", "ID_MODEL", "NAME"] {
-        if let Some(value) = device
-            .property_value(key)
-            .and_then(|value| value.to_str())
-        {
+        if let Some(value) = device.property_value(key).and_then(|value| value.to_str()) {
             let value = value.replace('_', " ").trim().to_string();
 
             if !value.is_empty() {
@@ -190,9 +175,7 @@ fn detect_device_name(
     match subsystem {
         "input" => "Input device".to_string(),
         "sound" => "Audio device".to_string(),
-        "usb" if device_type == "usb_device" => {
-            "USB device".to_string()
-        }
+        "usb" if device_type == "usb_device" => "USB device".to_string(),
         _ => "Device".to_string(),
     }
 }
@@ -307,27 +290,13 @@ async fn send_notification(
     body: &str,
     icon: &str,
 ) -> zbus::Result<()> {
-    let proxy = Proxy::new(
-        connection,
-        BUS_NAME,
-        OBJECT_PATH,
-        INTERFACE,
-    )
-    .await?;
+    let proxy = Proxy::new(connection, BUS_NAME, OBJECT_PATH, INTERFACE).await?;
 
     let actions: Vec<String> = Vec::new();
-    let hints: std::collections::HashMap<String, OwnedValue> =
-        std::collections::HashMap::new();
+    let hints: std::collections::HashMap<String, OwnedValue> = std::collections::HashMap::new();
 
     let args = (
-        "Aether",
-        0_u32,
-        icon,
-        summary,
-        body,
-        actions,
-        hints,
-        5000_i32,
+        "Aether", 0_u32, icon, summary, body, actions, hints, 5000_i32,
     );
 
     let _: u32 = proxy.call("Notify", &args).await?;
@@ -364,14 +333,14 @@ mod tests {
 
     #[test]
     fn an_audio_device_gets_a_notice_either_way() {
-        let (title, _, icon) =
-            device_message("sound", "sound", "Card", true, false).expect("audio should be announced");
+        let (title, _, icon) = device_message("sound", "sound", "Card", true, false)
+            .expect("audio should be announced");
 
         assert_eq!(title, "Device connected");
         assert_eq!(icon, "audio-card");
 
-        let (title, _, _) =
-            device_message("sound", "sound", "Card", false, false).expect("audio should be announced");
+        let (title, _, _) = device_message("sound", "sound", "Card", false, false)
+            .expect("audio should be announced");
 
         assert_eq!(title, "Device disconnected");
     }

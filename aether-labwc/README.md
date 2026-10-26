@@ -19,9 +19,10 @@ an existing `rc.xml` or `themerc-override` can still customize them.
 Super+1 through Super+0 switch directly to workspaces 1 through 10, and
 Super+Shift+number sends the focused window to the matching workspace. Aether
 starts with ten workspaces. The workspace OSD stays visible for 1.2 seconds
-and uses 30x26 markers with a 2-pixel outline; the current workspace is filled
-and its name is shown in the center. These are built-in defaults and may be
-overridden by `rc.xml` or `themerc-override`.
+and uses a rounded Aether surface, 24x18 markers, a blue active workspace, and
+a short slide-in animation. The current workspace name is shown beneath the
+markers. These are built-in defaults and may be overridden by `rc.xml` or
+`themerc-override`.
 
 ## Sources
 

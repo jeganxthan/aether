@@ -1,4 +1,5 @@
 use std::collections::VecDeque;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Mutex, OnceLock, PoisonError};
 use std::time::{Duration, Instant};
 
@@ -63,12 +64,62 @@ pub struct VisiblePopup {
 }
 
 static POPUPS: OnceLock<Mutex<VecDeque<Popup>>> = OnceLock::new();
+static HISTORY: OnceLock<Mutex<Vec<Notification>>> = OnceLock::new();
+static DO_NOT_DISTURB: AtomicBool = AtomicBool::new(false);
 
 // starts the listener exactly once
 static STARTED: OnceLock<()> = OnceLock::new();
 
 fn store() -> &'static Mutex<VecDeque<Popup>> {
     POPUPS.get_or_init(|| Mutex::new(VecDeque::new()))
+}
+
+fn history() -> &'static Mutex<Vec<Notification>> {
+    HISTORY.get_or_init(|| Mutex::new(Vec::new()))
+}
+
+pub fn active_notifications() -> Vec<Notification> {
+    start();
+    history()
+        .lock()
+        .unwrap_or_else(PoisonError::into_inner)
+        .clone()
+}
+
+pub fn do_not_disturb() -> bool {
+    DO_NOT_DISTURB.load(Ordering::Relaxed)
+}
+
+pub fn toggle_do_not_disturb() {
+    let enabled = !DO_NOT_DISTURB.load(Ordering::Relaxed);
+    DO_NOT_DISTURB.store(enabled, Ordering::Relaxed);
+
+    if enabled {
+        store()
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .clear();
+    }
+
+    refresh();
+}
+
+pub fn ensure_started() {
+    start();
+}
+
+pub fn clear_all() {
+    for notification in active_notifications() {
+        close_notification(notification.id);
+    }
+}
+
+pub fn close_notification(id: u32) {
+    runtime().spawn(async move {
+        if let Err(error) = aether_services::notifications::close_notification(id).await {
+            eprintln!("aether-panel: could not close notification {id}: {error}");
+        }
+    });
 }
 
 // the popups to draw, oldest first, which is also top to bottom on screen
@@ -151,20 +202,31 @@ pub fn dismiss(id: u32) {
         popup.leaving = true;
         popup.expired_at = Instant::now();
         drop(popups);
+        close_notification(id);
         refresh();
     }
 }
 
 fn start() {
+    let mut ready_receiver = None;
     STARTED.get_or_init(|| {
-        runtime().spawn(async {
-            let service = match NotificationService::start().await {
-                Ok(service) => service,
-                Err(error) => {
-                    eprintln!("aether: failed to start the notification service: {error}");
-                    return;
+        let (ready_sender, receiver) = std::sync::mpsc::sync_channel(1);
+        ready_receiver = Some(receiver);
+        runtime().spawn(async move {
+            let service = loop {
+                match NotificationService::start().await {
+                    Ok(service) => {
+                        let _ = ready_sender.send(());
+                        break service;
+                    }
+                    Err(error) => {
+                        eprintln!("aether: failed to start the notification service: {error}");
+                        tokio::time::sleep(Duration::from_secs(2)).await;
+                    }
                 }
             };
+            let mut events = service.subscribe();
+            replace_history(service.active());
 
             // Start battery alerts only after the D-Bus notification server is ready.
             let _battery_monitor = start_battery_alerts();
@@ -175,25 +237,38 @@ fn start() {
             // And the usb/audio/display plug notices.
             let _device_monitor = start_device_monitor();
 
-            let mut events = service.subscribe();
-
             // Animate popups while listening for notification events.
             runtime().spawn(animate());
 
             loop {
-                let Ok(event) = events.recv().await else {
-                    continue;
-                };
-
-                if handle(event) {
-                    refresh();
+                match events.recv().await {
+                    Ok(event) => {
+                        if handle(event) {
+                            refresh();
+                        }
+                    }
+                    Err(tokio::sync::broadcast::error::RecvError::Lagged(skipped)) => {
+                        eprintln!("aether-panel: skipped {skipped} notification events");
+                    }
+                    Err(tokio::sync::broadcast::error::RecvError::Closed) => break,
                 }
             }
         });
     });
+    if let Some(receiver) = ready_receiver
+        && receiver.recv_timeout(Duration::from_secs(3)).is_err()
+    {
+        eprintln!("aether-panel: notification service did not become ready within 3 seconds");
+    }
 }
 
 fn handle(event: NotificationEvent) -> bool {
+    let history_changed = update_history(&event);
+
+    if !should_enqueue_popup(do_not_disturb(), &event) {
+        return history_changed;
+    }
+
     let mut popups = store().lock().unwrap_or_else(PoisonError::into_inner);
 
     match event {
@@ -236,12 +311,54 @@ fn handle(event: NotificationEvent) -> bool {
                 popup.expired_at = Instant::now();
             }
 
-            false
+            history_changed
         }
 
         // an action is not shown yet, so it changes nothing on screen
         NotificationEvent::ActionInvoked { .. } => false,
     }
+}
+
+fn should_enqueue_popup(do_not_disturb: bool, event: &NotificationEvent) -> bool {
+    !do_not_disturb || !matches!(event, NotificationEvent::Created(_))
+}
+
+fn update_history(event: &NotificationEvent) -> bool {
+    let mut history = history().lock().unwrap_or_else(PoisonError::into_inner);
+    let changed = match event {
+        NotificationEvent::Created(notification) => {
+            if let Some(existing) = history
+                .iter_mut()
+                .find(|existing| existing.id == notification.id)
+            {
+                if *existing == *notification {
+                    false
+                } else {
+                    *existing = notification.clone();
+                    true
+                }
+            } else {
+                history.push(notification.clone());
+                if history.len() > 100 {
+                    history.remove(0);
+                }
+                true
+            }
+        }
+        NotificationEvent::Closed { id, .. } => {
+            let previous_len = history.len();
+            history.retain(|item| item.id != *id);
+            history.len() != previous_len
+        }
+        NotificationEvent::ActionInvoked { .. } => false,
+    };
+    drop(history);
+    changed
+}
+
+fn replace_history(notifications: Vec<Notification>) {
+    *history().lock().unwrap_or_else(PoisonError::into_inner) = notifications;
+    refresh();
 }
 
 // the moment a popup slides out at, from what the sender asked for
@@ -352,6 +469,7 @@ mod tests {
             1,
             "App".into(),
             String::new(),
+            String::new(),
             "Summary".into(),
             "Body".into(),
             Vec::new(),
@@ -368,6 +486,16 @@ mod tests {
     fn a_negative_timeout_also_uses_the_default() {
         // notify-send with no -t sends -1, and that has to close like any other
         assert_eq!(timeout_of(&notification(-1)), DEFAULT_TIMEOUT);
+    }
+
+    #[test]
+    fn do_not_disturb_keeps_notifications_out_of_the_popup_queue() {
+        let created = NotificationEvent::Created(notification(0));
+        let closed = NotificationEvent::Closed { id: 1, reason: 3 };
+
+        assert!(!should_enqueue_popup(true, &created));
+        assert!(should_enqueue_popup(false, &created));
+        assert!(should_enqueue_popup(true, &closed));
     }
 
     #[test]

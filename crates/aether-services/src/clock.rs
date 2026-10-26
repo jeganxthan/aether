@@ -1,6 +1,6 @@
 use chrono::Local;
 use tokio::sync::watch;
-use tokio::time::{interval, MissedTickBehavior, Duration};
+use tokio::time::{Duration, MissedTickBehavior, interval};
 
 #[derive(Debug, Clone)]
 pub struct ClockService {
@@ -73,7 +73,10 @@ mod tests {
 
         // three letters, all upper case, like OCT
         assert_eq!(month.len(), 3, "unexpected month: {month}");
-        assert!(month.chars().all(|c| c.is_ascii_uppercase()), "the month is not upper: {month}");
+        assert!(
+            month.chars().all(|c| c.is_ascii_uppercase()),
+            "the month is not upper: {month}"
+        );
 
         // a plain day number, like 18
         assert!(day.parse::<u32>().is_ok(), "unexpected day: {day}");

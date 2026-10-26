@@ -26,6 +26,7 @@ swash = "0.2.10"
 zune-jpeg = "0.5.15"
 png = "0.18.1"
 resvg = { version = "0.48.1", default-features = false }
+image = { version = "0.25.10", default-features = false, features = ["bmp", "jpeg", "png", "webp"] }
 
 [lints.clippy]
 # keep the zero-denominator guard explicit

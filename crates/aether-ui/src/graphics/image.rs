@@ -148,8 +148,18 @@ pub fn read(path: &Path) -> Option<Bitmap> {
         return svg::rasterize(&bytes);
     }
 
-    // only png, jpeg and svg are supported
-    None
+    decode_other(&bytes)
+}
+
+fn decode_other(bytes: &[u8]) -> Option<Bitmap> {
+    let image = ::image::load_from_memory(bytes).ok()?.into_rgba8();
+    let (width, height) = image.dimensions();
+
+    Some(Bitmap {
+        width,
+        height,
+        pixels: Arc::new(image.into_raw()),
+    })
 }
 
 fn decode_png(bytes: &[u8]) -> Option<Bitmap> {

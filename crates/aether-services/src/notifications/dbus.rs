@@ -1,15 +1,10 @@
-
 use std::{
     collections::VecDeque,
     sync::{Arc, Mutex},
 };
 
 use tokio::sync::broadcast;
-use zbus::{
-    interface,
-    object_server::SignalEmitter,
-    Connection,
-};
+use zbus::{Connection, interface, object_server::SignalEmitter};
 use zvariant::OwnedValue;
 
 use super::model::{Notification, NotificationEvent};
@@ -59,14 +54,16 @@ impl NotificationInterface {
         summary: String,
         body: String,
         actions: Vec<String>,
-        _hints: std::collections::HashMap<String, OwnedValue>,
+        hints: std::collections::HashMap<String, OwnedValue>,
         expire_timeout: i32,
     ) -> u32 {
+        let category = hints
+            .get("category")
+            .and_then(|value| String::try_from(value.clone()).ok())
+            .unwrap_or_default();
         let mut store = self.store.lock().expect("notification store poisoned");
 
-        let id = if replaces_id != 0
-            && store.history.iter().any(|item| item.id == replaces_id)
-        {
+        let id = if replaces_id != 0 && store.history.iter().any(|item| item.id == replaces_id) {
             replaces_id
         } else {
             store.allocate_id()
@@ -76,6 +73,7 @@ impl NotificationInterface {
         if let Some(existing) = store.history.iter_mut().find(|item| item.id == id) {
             existing.app_name = app_name.clone();
             existing.app_icon = app_icon.clone();
+            existing.category = category.clone();
             existing.summary = summary.clone();
             existing.body = body.clone();
             existing.actions = actions.clone();
@@ -83,6 +81,7 @@ impl NotificationInterface {
                 id,
                 app_name.clone(),
                 app_icon.clone(),
+                category.clone(),
                 summary.clone(),
                 body.clone(),
                 actions.clone(),
@@ -102,6 +101,7 @@ impl NotificationInterface {
             id,
             app_name,
             app_icon,
+            category,
             summary,
             body,
             actions,
@@ -132,10 +132,9 @@ impl NotificationInterface {
         };
 
         if found {
-            let _ = self.events.send(NotificationEvent::Closed {
-                id,
-                reason: 3,
-            });
+            let _ = self
+                .events
+                .send(NotificationEvent::Closed { id, reason: 3 });
             Self::notification_closed(&emitter, id, 3).await?;
         }
 
@@ -185,8 +184,6 @@ pub struct NotificationService {
 impl NotificationService {
     pub async fn start() -> zbus::Result<Self> {
         let connection = Connection::session().await?;
-        connection.request_name(BUS_NAME).await?;
-
         let store = Arc::new(Mutex::new(Store::default()));
         let (events, _) = broadcast::channel(128);
 
@@ -199,6 +196,7 @@ impl NotificationService {
             .object_server()
             .at(OBJECT_PATH, interface)
             .await?;
+        connection.request_name(BUS_NAME).await?;
 
         Ok(Self {
             connection,
@@ -234,5 +232,28 @@ impl NotificationService {
 
     pub fn connection(&self) -> &Connection {
         &self.connection
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[tokio::test]
+    #[ignore = "requires a private D-Bus session"]
+    async fn service_accepts_and_closes_notifications() {
+        let service = NotificationService::start()
+            .await
+            .expect("notification server should register its D-Bus name");
+        let id = super::super::client::publish("test", "", "hello", "world")
+            .await
+            .expect("notification request should reach the server");
+
+        assert_eq!(service.active().len(), 1);
+
+        super::super::client::close_notification(id)
+            .await
+            .expect("notification close request should reach the server");
+        assert!(service.active().is_empty());
     }
 }

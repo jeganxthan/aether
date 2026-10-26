@@ -19,9 +19,9 @@ fn premium_text(value: impl Into<String>) -> Text {
 }
 
 const CARD_WIDTH: f32 = 372.0;
-const CARD_HEIGHT: f32 = 84.0;
+const CARD_HEIGHT: f32 = 94.0;
 const CARD_GAP: f32 = 8.0;
-const CARD_RADIUS: f32 = 0.0;
+const CARD_RADIUS: f32 = 16.0;
 const CARD_PADDING: f32 = 13.0;
 
 // the distance kept from the screen edges (positioned right under the top panel)
@@ -32,8 +32,8 @@ const EDGE_INSET_TOP: f32 = 36.0;
 const EMPTY_HEIGHT: f32 = 1.0;
 
 // the avatar in front of the text, and the close button beside it
-const AVATAR_SIZE: f32 = 40.0;
-const CLOSE_SIZE: f32 = 30.0;
+const AVATAR_SIZE: f32 = 42.0;
+const CLOSE_SIZE: f32 = 28.0;
 
 // the space between the avatar, the text and the close button
 const COLUMN_GAP: f32 = 12.0;
@@ -197,8 +197,71 @@ fn mix_color(from: Color, to: Color, amount: f32) -> Color {
 
 // path to the bundled SVG notification icon
 fn fallback_icon_path() -> PathBuf {
-    PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .join("../../assets/icons/notification/aether-applet-notification-symbolic.svg")
+    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../assets/icons/notification/bell.svg")
+}
+
+pub(crate) fn icon_path(notification: &Notification) -> PathBuf {
+    if let Some(path) = resolve_icon(&notification.app_icon) {
+        return path;
+    }
+
+    let category = format!(
+        "{} {} {}",
+        notification.category, notification.app_name, notification.summary
+    )
+    .to_ascii_lowercase();
+    let icon = if contains_any(&category, &["network", "connectivity", "wifi", "ethernet"]) {
+        "network"
+    } else if contains_any(&category, &["battery", "power", "charging"]) {
+        "battery"
+    } else if contains_any(
+        &category,
+        &[
+            "email",
+            "mail",
+            "message",
+            "im.received",
+            "im.sent",
+            "presence",
+            "chat",
+        ],
+    ) {
+        "message"
+    } else if contains_any(&category, &["transfer", "download", "upload", "file"]) {
+        "download"
+    } else if contains_any(&category, &["calendar", "reminder", "appointment"]) {
+        "calendar"
+    } else if contains_any(&category, &["media", "audio", "music", "playback"]) {
+        "media"
+    } else if contains_any(
+        &category,
+        &[
+            "warning", "error", "security", "system", "device", "hardware",
+        ],
+    ) {
+        "warning"
+    } else {
+        return fallback_icon_path();
+    };
+
+    let path = match icon {
+        "network" => PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("../../assets/icons/wifi/network-wireless-signal-good-symbolic.svg"),
+        "battery" => PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("../../assets/icons/battery/aether-applet-battery-level-65-symbolic.svg"),
+        _ => PathBuf::from(env!("CARGO_MANIFEST_DIR")).join(format!(
+            "../../assets/icons/notification/notification-{icon}.svg"
+        )),
+    };
+    if path.is_file() {
+        path
+    } else {
+        fallback_icon_path()
+    }
+}
+
+fn contains_any(text: &str, terms: &[&str]) -> bool {
+    terms.iter().any(|term| text.contains(term))
 }
 
 // searches for a valid icon from an absolute path or common system icon themes
@@ -242,50 +305,33 @@ fn resolve_icon(app_icon: &str) -> Option<PathBuf> {
  * with the notification bell when it did not.
  */
 fn avatar(notification: &Notification) -> Rectangle {
-    if let Some(path) = resolve_icon(&notification.app_icon) {
-        // a picture fills the whole box, an icon sits in it
-        if path
-            .extension()
-            .is_some_and(|extension| extension.eq_ignore_ascii_case("png"))
-        {
-            return Rectangle::new()
-                .width(AVATAR_SIZE)
-                .height(AVATAR_SIZE)
-                .radius(Radius::Fixed(0.0))
-                .fill(Image::cover(path))
-                .clip();
-        }
-
-        return Rectangle::new()
+    let path = icon_path(notification);
+    // a picture fills the whole box, an icon sits in it
+    if path
+        .extension()
+        .is_some_and(|extension| extension.eq_ignore_ascii_case("png"))
+    {
+        Rectangle::new()
             .width(AVATAR_SIZE)
             .height(AVATAR_SIZE)
-            .radius(Radius::Fixed(0.0))
-            .fill(AVATAR_COLOR)
-            .padding(7.0)
-            .align_child(Center, Center)
-            .child(
-                Rectangle::new()
-                    .width(26.0)
-                    .height(26.0)
-                    .fill(Image::contain(path)),
-            );
+            .radius(Radius::Fixed(12.0))
+            .fill(Image::cover(&path))
+            .clip();
     }
 
-    // fallback: a square badge with the symbolic notification bell
-    let fallback = fallback_icon_path();
-
-    Rectangle::new()
+    return Rectangle::new()
         .width(AVATAR_SIZE)
         .height(AVATAR_SIZE)
-        .radius(Radius::Fixed(0.0))
+        .radius(Radius::Fixed(12.0))
         .fill(AVATAR_COLOR)
+        .padding(7.0)
         .align_child(Center, Center)
         .child(
             Rectangle::new()
-                .width(20.0)
-                .height(20.0)
-                .fill(ink_image(fallback, TEXT_COLOR)),
-        )
+                .width(26.0)
+                .height(26.0)
+                .fill(ink_image(path, TEXT_COLOR)),
+        );
 }
 
 // the square button that sends the notification away
@@ -293,7 +339,7 @@ fn close_button(id: u32, hover: f32) -> Rectangle {
     Rectangle::new()
         .width(CLOSE_SIZE)
         .height(CLOSE_SIZE)
-        .radius(Radius::Fixed(0.0))
+        .radius(Radius::Full)
         .fill(Color::rgba(
             CLOSE_HOVER_COLOR.red(),
             CLOSE_HOVER_COLOR.green(),
@@ -559,6 +605,40 @@ mod tests {
             "fallback icon missing: {}",
             fallback_icon_path().display()
         );
+    }
+
+    #[test]
+    fn categories_select_topic_icons() {
+        let topics = [
+            (
+                "network.disconnected",
+                "network-wireless-signal-good-symbolic.svg",
+            ),
+            ("battery.low", "aether-applet-battery-level-65-symbolic.svg"),
+            ("im.received", "notification-message.svg"),
+            ("transfer.complete", "notification-download.svg"),
+            ("calendar.reminder", "notification-calendar.svg"),
+            ("media.player", "notification-media.svg"),
+            ("security.warning", "notification-warning.svg"),
+        ];
+
+        for (category, icon) in topics {
+            let notification = Notification::new(
+                1,
+                String::new(),
+                String::new(),
+                category.to_owned(),
+                String::new(),
+                String::new(),
+                Vec::new(),
+                0,
+            );
+            assert_eq!(
+                icon_path(&notification).file_name().unwrap(),
+                icon,
+                "wrong icon for category {category}"
+            );
+        }
     }
 
     #[test]

@@ -8,7 +8,7 @@ use aether::{
 use crate::services::clock;
 
 const BACKGROUND: Color = Color::rgb(20, 22, 29);
-const SHADE: Color = Color::rgba(0, 0, 0, 122);
+const SHADE: Color = Color::rgba(0, 0, 0, 60);
 const ACCENT: Color = Color::rgb(151, 190, 255);
 const TEXT: Color = Color::rgb(245, 246, 250);
 const MUTED: Color = Color::rgba(245, 246, 250, 176);
@@ -50,7 +50,7 @@ pub fn view(_: &aether::Monitor) -> LayerWindow {
             Rectangle::new()
                 .width(Parent)
                 .height(Parent)
-                .fill(Image::cover(path).thumbnail(192, 108).blurred(5))
+                .fill(Image::cover(path).thumbnail(640, 360).blurred(32))
         },
     );
 
@@ -147,8 +147,60 @@ pub fn view(_: &aether::Monitor) -> LayerWindow {
 }
 
 fn lock_wallpaper() -> Option<PathBuf> {
-    let path = std::env::var_os("AETHER_LOCK_WALLPAPER")?;
-    let path = PathBuf::from(path);
+    if let Some(path) = std::env::var_os("AETHER_LOCK_WALLPAPER")
+        .map(PathBuf::from)
+        .filter(|path| path.is_file())
+    {
+        return Some(path);
+    }
 
+    wallpaper_from_settings().or_else(wallpaper_from_swaybg)
+}
+
+fn wallpaper_from_settings() -> Option<PathBuf> {
+    let config_dir = std::env::var_os("XDG_CONFIG_HOME")
+        .map(PathBuf::from)
+        .or_else(|| std::env::var_os("HOME").map(|home| PathBuf::from(home).join(".config")))?;
+    let path =
+        std::fs::read_to_string(config_dir.join("com.aether-settings/wallpaper.txt")).ok()?;
+    let path = PathBuf::from(path.trim());
     path.is_file().then_some(path)
+}
+
+fn wallpaper_from_swaybg() -> Option<PathBuf> {
+    let processes = std::fs::read_dir("/proc").ok()?;
+    for process in processes.flatten() {
+        let process_dir = process.path();
+        let Ok(executable) = std::fs::read_link(process_dir.join("exe")) else {
+            continue;
+        };
+        if executable.file_name().is_none_or(|name| name != "swaybg") {
+            continue;
+        }
+
+        let Ok(command_line) = std::fs::read(process_dir.join("cmdline")) else {
+            continue;
+        };
+        let arguments: Vec<&str> = command_line
+            .split(|byte| *byte == 0)
+            .filter_map(|argument| std::str::from_utf8(argument).ok())
+            .collect();
+        let mut index = 0;
+        while index < arguments.len() {
+            if arguments[index] == "-i" || arguments[index] == "--image" {
+                if let Some(path) = arguments.get(index + 1).map(PathBuf::from)
+                    && path.is_file()
+                {
+                    return Some(path);
+                }
+            } else if let Some(image) = arguments[index].strip_prefix("--image=") {
+                let path = PathBuf::from(image);
+                if path.is_file() {
+                    return Some(path);
+                }
+            }
+            index += 1;
+        }
+    }
+    None
 }

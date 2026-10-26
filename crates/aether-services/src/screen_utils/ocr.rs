@@ -24,7 +24,12 @@ fn tesseract() -> Result<PathBuf, String> {
     }
 
     // also check common locations directly
-    for candidate in ["/usr/bin/tesseract", "/usr/bin/tesseract-ocr", "/bin/tesseract", "/bin/tesseract-ocr"] {
+    for candidate in [
+        "/usr/bin/tesseract",
+        "/usr/bin/tesseract-ocr",
+        "/bin/tesseract",
+        "/bin/tesseract-ocr",
+    ] {
         let path = PathBuf::from(candidate);
         if path.is_file() {
             return Ok(path);
@@ -59,12 +64,7 @@ fn failure(stderr: &[u8]) -> String {
 }
 
 fn notify_failure(error: &str) {
-    notify::notify(
-        "OCR",
-        &icons::icon("clipboard"),
-        "OCR failed",
-        error,
-    );
+    notify::notify("OCR", &icons::icon("clipboard"), "OCR failed", error);
 }
 
 /// Recognize text in a selected screen region and copy it.
@@ -105,7 +105,8 @@ pub fn ocr_selection() -> Result<String, String> {
         Ok(child) => child,
         Err(e) => {
             let msg = if e.kind() == std::io::ErrorKind::NotFound {
-                "Tesseract is not installed (install tesseract-ocr and tesseract-ocr-eng)".to_string()
+                "Tesseract is not installed (install tesseract-ocr and tesseract-ocr-eng)"
+                    .to_string()
             } else {
                 format!("Failed to start Tesseract: {e}")
             };
@@ -146,9 +147,7 @@ pub fn ocr_selection() -> Result<String, String> {
         return Err(msg);
     }
 
-    let text = String::from_utf8_lossy(&output.stdout)
-        .trim()
-        .to_owned();
+    let text = String::from_utf8_lossy(&output.stdout).trim().to_owned();
 
     if text.is_empty() {
         let msg = "No text detected".to_string();
@@ -181,7 +180,8 @@ mod tests {
 
     #[test]
     fn a_missing_language_pack_is_reported() {
-        let error = failure(b"Error, cannot initialize Tesseract.\nFailed loading language 'eng'\n");
+        let error =
+            failure(b"Error, cannot initialize Tesseract.\nFailed loading language 'eng'\n");
 
         assert!(error.contains("could not recognize"));
     }

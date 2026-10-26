@@ -1,7 +1,9 @@
 pub mod battery_menu;
 pub mod battery_popup;
-pub mod clipboard_popup;
+pub mod bluetooth_menu;
+pub mod bluetooth_popup;
 pub mod launcher;
+pub mod notification_menu;
 pub mod player_popup;
 pub mod polkit_auth;
 mod popup_motion;

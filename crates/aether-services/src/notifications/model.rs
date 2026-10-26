@@ -1,4 +1,3 @@
-
 use std::time::{SystemTime, UNIX_EPOCH};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -6,6 +5,7 @@ pub struct Notification {
     pub id: u32,
     pub app_name: String,
     pub app_icon: String,
+    pub category: String,
     pub summary: String,
     pub body: String,
     pub actions: Vec<String>,
@@ -19,6 +19,7 @@ impl Notification {
         id: u32,
         app_name: String,
         app_icon: String,
+        category: String,
         summary: String,
         body: String,
         actions: Vec<String>,
@@ -28,6 +29,7 @@ impl Notification {
             id,
             app_name,
             app_icon,
+            category,
             summary,
             body,
             actions,

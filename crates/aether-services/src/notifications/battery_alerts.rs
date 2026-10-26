@@ -1,4 +1,3 @@
-
 use std::{
     collections::HashSet,
     fs, io,
@@ -69,10 +68,7 @@ async fn monitor_battery() -> io::Result<()> {
                                 notify_retry(
                                     &connection,
                                     "Charger connected",
-                                    &format!(
-                                        "Battery is charging at {}%.",
-                                        current.level
-                                    ),
+                                    &format!("Battery is charging at {}%.", current.level),
                                     "battery-good-charging",
                                 )
                                 .await;
@@ -81,10 +77,7 @@ async fn monitor_battery() -> io::Result<()> {
                                 notify_retry(
                                     &connection,
                                     "Charger disconnected",
-                                    &format!(
-                                        "Running on battery at {}%.",
-                                        current.level
-                                    ),
+                                    &format!("Running on battery at {}%.", current.level),
                                     "battery-good",
                                 )
                                 .await;
@@ -101,17 +94,13 @@ async fn monitor_battery() -> io::Result<()> {
                     match current.mode {
                         BatteryMode::Discharging => {
                             for threshold in LOW_THRESHOLDS {
-                                let crossed =
-                                    old.level > threshold
-                                        && current.level <= threshold;
+                                let crossed = old.level > threshold && current.level <= threshold;
 
                                 // Also handle the first observation below a
                                 // threshold, including after a status change.
-                                let already_below =
-                                    current.level <= threshold
-                                        && !alerted_low.contains(&threshold)
-                                        && (old.mode != current.mode
-                                            || crossed);
+                                let already_below = current.level <= threshold
+                                    && !alerted_low.contains(&threshold)
+                                    && (old.mode != current.mode || crossed);
 
                                 if crossed || already_below {
                                     if notify_retry(
@@ -133,42 +122,28 @@ async fn monitor_battery() -> io::Result<()> {
 
                         BatteryMode::Charging => {
                             for threshold in HIGH_THRESHOLDS {
-                                let crossed =
-                                    old.level < threshold
-                                        && current.level >= threshold;
+                                let crossed = old.level < threshold && current.level >= threshold;
 
-                                let already_above =
-                                    current.level >= threshold
-                                        && !alerted_high.contains(&threshold)
-                                        && old.mode != current.mode;
+                                let already_above = current.level >= threshold
+                                    && !alerted_high.contains(&threshold)
+                                    && old.mode != current.mode;
 
                                 if crossed || already_above {
-                                    let (title, message, icon) =
-                                        if threshold == 100 {
-                                            (
-                                                "Battery fully charged",
-                                                "Battery reached 100%.".to_string(),
-                                                "battery-full",
-                                            )
-                                        } else {
-                                            (
-                                                "Battery charging",
-                                                format!(
-                                                    "Battery is at {}%.",
-                                                    current.level
-                                                ),
-                                                "battery-full",
-                                            )
-                                        };
+                                    let (title, message, icon) = if threshold == 100 {
+                                        (
+                                            "Battery fully charged",
+                                            "Battery reached 100%.".to_string(),
+                                            "battery-full",
+                                        )
+                                    } else {
+                                        (
+                                            "Battery charging",
+                                            format!("Battery is at {}%.", current.level),
+                                            "battery-full",
+                                        )
+                                    };
 
-                                    if notify_retry(
-                                        &connection,
-                                        title,
-                                        &message,
-                                        icon,
-                                    )
-                                    .await
-                                    {
+                                    if notify_retry(&connection, title, &message, icon).await {
                                         alerted_high.insert(threshold);
                                     }
                                 }
@@ -211,12 +186,7 @@ async fn monitor_battery() -> io::Result<()> {
     }
 }
 
-async fn notify_retry(
-    connection: &Connection,
-    title: &str,
-    message: &str,
-    icon: &str,
-) -> bool {
+async fn notify_retry(connection: &Connection, title: &str, message: &str, icon: &str) -> bool {
     match send_notification(connection, title, message, icon).await {
         Ok(()) => true,
         Err(error) => {
@@ -250,6 +220,28 @@ fn find_battery() -> io::Result<PathBuf> {
     ))
 }
 
+fn ac_online() -> bool {
+    let Ok(entries) = fs::read_dir("/sys/class/power_supply") else {
+        return false;
+    };
+
+    for entry in entries.flatten() {
+        let path = entry.path();
+        if fs::read_to_string(path.join("type"))
+            .map(|value| value.trim() == "Mains")
+            .unwrap_or(false)
+            && fs::read_to_string(path.join("online"))
+                .ok()
+                .and_then(|value| value.trim().parse::<u8>().ok())
+                == Some(1)
+        {
+            return true;
+        }
+    }
+
+    false
+}
+
 fn read_battery(path: &Path) -> io::Result<BatteryReading> {
     let level = fs::read_to_string(path.join("capacity"))?
         .trim()
@@ -261,6 +253,7 @@ fn read_battery(path: &Path) -> io::Result<BatteryReading> {
     let mode = match status.trim() {
         "Charging" => BatteryMode::Charging,
         "Discharging" => BatteryMode::Discharging,
+        "Not charging" if ac_online() => BatteryMode::Charging,
         _ => BatteryMode::Other,
     };
 
@@ -276,27 +269,13 @@ async fn send_notification(
     body: &str,
     icon: &str,
 ) -> zbus::Result<()> {
-    let proxy = Proxy::new(
-        connection,
-        BUS_NAME,
-        OBJECT_PATH,
-        INTERFACE,
-    )
-    .await?;
+    let proxy = Proxy::new(connection, BUS_NAME, OBJECT_PATH, INTERFACE).await?;
 
     let actions: Vec<String> = Vec::new();
-    let hints: std::collections::HashMap<String, OwnedValue> =
-        std::collections::HashMap::new();
+    let hints: std::collections::HashMap<String, OwnedValue> = std::collections::HashMap::new();
 
     let args = (
-        "Aether",
-        0_u32,
-        icon,
-        summary,
-        body,
-        actions,
-        hints,
-        5000_i32,
+        "Aether", 0_u32, icon, summary, body, actions, hints, 5000_i32,
     );
 
     let _: u32 = proxy.call("Notify", &args).await?;

@@ -86,7 +86,9 @@ impl KeyboardHandler for WaylandState {
         _: u32,
         event: KeyEvent,
     ) {
-        let Some(surface) = self.keyboard_focus.clone() else { return; };
+        let Some(surface) = self.keyboard_focus.clone() else {
+            return;
+        };
         let key = to_key(&event, self.control_down);
         if focus::send(key) {
             self.request_frame_on(&surface);

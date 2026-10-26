@@ -23,7 +23,7 @@ const ISLAND_BODY_WIDTH: f32 = 200.0;
 const MENU_PROGRESS_WIDTH: f32 = 170.0;
 
 // Margin from screen right edge — centers under player icon in top bar
-pub const PLAYER_EDGE_INSET_RIGHT: f32 = 4.0;
+pub const PLAYER_EDGE_INSET_RIGHT: f32 = 80.0;
 
 const ISLAND_ANIM_DURATION: Duration = Duration::from_millis(220);
 static PROGRESS: OnceLock<Mutex<Animation<f32>>> = OnceLock::new();

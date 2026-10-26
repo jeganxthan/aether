@@ -31,7 +31,8 @@ impl PlayerBrand {
             Self::Brave
         } else if lower.contains("spotify") {
             Self::Spotify
-        } else if lower.contains("chrome") || lower.contains("google") || lower.contains("chromium") {
+        } else if lower.contains("chrome") || lower.contains("google") || lower.contains("chromium")
+        {
             Self::Google
         } else {
             Self::Other
@@ -258,11 +259,15 @@ impl PlayerService {
                 "/org/mpris/MediaPlayer2",
                 "org.mpris.MediaPlayer2.Player",
             )
-            .await else {
+            .await
+            else {
                 continue;
             };
 
-            let status: String = proxy.get_property("PlaybackStatus").await.unwrap_or_default();
+            let status: String = proxy
+                .get_property("PlaybackStatus")
+                .await
+                .unwrap_or_default();
             let is_playing = status.eq_ignore_ascii_case("Playing");
             let is_paused = status.eq_ignore_ascii_case("Paused");
 
@@ -404,7 +409,6 @@ impl PlayerService {
         let _: () = proxy.call("Seek", &(offset_us)).await?;
         Ok(())
     }
-
 }
 
 #[cfg(test)]

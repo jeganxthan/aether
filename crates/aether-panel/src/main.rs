@@ -11,7 +11,10 @@ use panel::top::panel;
 // use panel::island::island;
 use panel::component::battery_menu::battery_menu;
 use panel::component::battery_popup::battery_hint;
-use panel::component::clipboard_popup;
+use panel::component::bluetooth_menu::bluetooth_menu;
+use panel::component::bluetooth_popup::bluetooth_hint;
+use panel::component::notification_menu::notification_menu;
+
 use panel::component::launcher::launcher;
 use panel::component::player_popup::{player_menu, player_popup};
 use panel::component::polkit_auth;
@@ -20,9 +23,10 @@ use panel::component::wifi_popup::{wifi_hint, wifi_menu};
 use panel::lockscreen::view as lockscreen;
 
 fn main() {
+    services::notifications::ensure_started();
     // Warm up launcher applications and icon cache in the background on startup
     panel::component::launcher::preload();
-    clipboard_popup::start();
+    // clipboard removed
     polkit_auth::start();
 
     // Inside your existing async startup function:
@@ -30,14 +34,16 @@ fn main() {
         // panel mode: the top bar plus the notification popups in the top right corner
         .window(panel)
         .window(notifications)
+        .window(notification_menu)
         // the network name shown under the wifi icon, and the menu a click opens
         .window(wifi_hint)
         .window(wifi_menu)
         // battery percentage and time estimate on hover
         .window(battery_hint)
+        .window(bluetooth_hint)
         // battery details and power profile island opened from the battery icon
         .window(battery_menu)
-        .window(clipboard_popup::view)
+        .window(bluetooth_menu)
         // dynamic island media player popup
         .window(player_popup)
         .window(player_menu)
@@ -106,16 +112,8 @@ fn handle_launcher(arguments: &[String]) -> String {
     "ok".to_owned()
 }
 
-fn handle_clipboard(arguments: &[String]) -> String {
-    match arguments.first().map(String::as_str).unwrap_or("open") {
-        "open" => clipboard_popup::open(),
-        "close" => clipboard_popup::close(),
-        "toggle" => clipboard_popup::toggle(),
-        "pin" => clipboard_popup::pin_selected(),
-        _ => return "unknown clipboard action".to_owned(),
-    }
-
-    "ok".to_owned()
+fn handle_clipboard(_arguments: &[String]) -> String {
+    "clipboard removed".to_owned()
 }
 
 // python3 - "$XDG_RUNTIME_DIR/aether.sock" light <<'PY'

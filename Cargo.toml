@@ -8,6 +8,6 @@ members = [
     "crates/aether-panel",
     "crates/aether-services",
     "crates/aether-ui",
-    "crates/aether-screenshot",
+    "crates/aether-settings/src-tauri",
 ]
 resolver = "3"

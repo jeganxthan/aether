@@ -12,6 +12,7 @@ use crate::panel::svg::distro_svg::distro_icon;
 use crate::panel::svg::player_svg::player_brand_icon;
 use crate::panel::svg::wifi_svg::WifiSignalIcon;
 use crate::services::battery::battery;
+use crate::services::bluetooth as bt_service;
 use crate::services::clock::{clock, date};
 use crate::services::player::player;
 use crate::services::wifi::{ethernet_connected, wifi};
@@ -69,7 +70,6 @@ pub fn panel() -> LayerWindow {
     });
 
     let launcher_active = launcher::is_open();
-
     let mut right_items: Vec<Box<dyn Widget>> = Vec::new();
 
     // Keep the active player's brand icon visible in the panel.
@@ -94,23 +94,6 @@ pub fn panel() -> LayerWindow {
             Rectangle::new().width(ICON_GAP).height(1.0).fill(theme.bar),
         ));
     }
-    let clipboard_icon = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .join("../../assets/icons/panel/clipboard.svg");
-    right_items.push(Box::new(
-        Rectangle::new()
-            .width(PLAYER_HIT_WIDTH)
-            .height(Parent)
-            .fill(Color::TRANSPARENT)
-            .cursor(Cursor::Pointer)
-            .align_child(Align::Center, Align::Center)
-            .on_click(|_| crate::panel::component::clipboard_popup::toggle())
-            .child(Rectangle::new().width(ICON_SIZE).height(ICON_SIZE).fill(
-                crate::panel::svg::recolor::ink_image(clipboard_icon, theme.icon),
-            )),
-    ));
-    right_items.push(Box::new(
-        Rectangle::new().width(6.0).height(1.0).fill(theme.bar),
-    ));
     // Wifi icon
     let wifi_active = hovered() || open();
     right_items.push(Box::new(
@@ -146,23 +129,35 @@ pub fn panel() -> LayerWindow {
 
     // small gap between wifi and bluetooth icons
     right_items.push(Box::new(
-        Rectangle::new()
-            .width(6.0)
-            .height(1.0)
-            .fill(theme.bar),
+        Rectangle::new().width(6.0).height(1.0).fill(theme.bar),
     ));
-    let bluetooth = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .join("../../assets/icons/panel/bluetooth.svg");
+    let bt_powered = bt_service::powered();
+    let bluetooth_icon = if bt_powered {
+        std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("../../assets/icons/panel/bluetooth.svg")
+    } else {
+        std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("../../assets/icons/panel/bluetooth-off.svg")
+    };
     right_items.push(Box::new(
         Rectangle::new()
             .width(PLAYER_HIT_WIDTH)
             .height(Parent)
-            .fill(Color::TRANSPARENT)
+            .fill(
+                if crate::panel::component::bluetooth_popup::hovered()
+                    || crate::panel::component::bluetooth_menu::open()
+                {
+                    aether::Color::BLACK
+                } else {
+                    Color::TRANSPARENT
+                },
+            )
             .cursor(Cursor::Pointer)
             .align_child(Align::Center, Align::Center)
-            .on_click(|_| crate::panel::component::clipboard_popup::toggle())
+            .on_hover(crate::panel::component::bluetooth_popup::set_hovered)
+            .on_click(|_| crate::panel::component::bluetooth_menu::toggle_open())
             .child(Rectangle::new().width(ICON_SIZE).height(ICON_SIZE).fill(
-                crate::panel::svg::recolor::ink_image(bluetooth, theme.icon),
+                crate::panel::svg::recolor::ink_image(bluetooth_icon, theme.icon),
             )),
     ));
     right_items.push(Box::new(
@@ -212,6 +207,52 @@ pub fn panel() -> LayerWindow {
         Rectangle::new().width(ICON_GAP).height(1.0).fill(theme.bar),
     ));
 
+    let notification_count = crate::services::notifications::active_notifications().len();
+    let notification_hovered = crate::panel::component::notification_menu::hovered()
+        || crate::panel::component::notification_menu::open();
+    let notification_icon = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join(
+        if crate::services::notifications::do_not_disturb() {
+            "../../assets/icons/notification/bell-off.svg"
+        } else {
+            "../../assets/icons/notification/bell.svg"
+        },
+    );
+    right_items.push(Box::new(
+        Rectangle::new()
+            .width(48.0)
+            .height(Parent)
+            .fill(if notification_hovered {
+                aether::Color::BLACK
+            } else {
+                Color::TRANSPARENT
+            })
+            .cursor(Cursor::Pointer)
+            .align_child(Align::Center, Align::Center)
+            .on_hover(crate::panel::component::notification_menu::set_hovered)
+            .on_click(|_| crate::panel::component::notification_menu::toggle_open())
+            .child(
+                Row::new(children![
+                    Rectangle::new().width(ICON_SIZE).height(ICON_SIZE).fill(
+                        crate::panel::svg::recolor::ink_image(notification_icon, theme.icon,)
+                    ),
+                    Text::new(if notification_hovered {
+                        notification_count.to_string()
+                    } else {
+                        String::new()
+                    })
+                    .font("Maple Mono")
+                    .color(theme.bar_text)
+                    .size(10.0),
+                ])
+                .height(Parent)
+                .gap(6.0)
+                .align(Align::Center),
+            ),
+    ));
+    right_items.push(Box::new(
+        Rectangle::new().width(6.0).height(1.0).fill(theme.bar),
+    ));
+
     let settings_icon = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
         .join("../../assets/icons/panel/settings.svg");
     right_items.push(Box::new(
@@ -226,6 +267,25 @@ pub fn panel() -> LayerWindow {
             )),
     ));
 
+    let left_items: Vec<Box<dyn Widget>> = vec![Box::new(
+        Rectangle::new()
+            .width(26.0)
+            .height(Parent)
+            .fill(if launcher_active {
+                aether::Color::BLACK
+            } else {
+                Color::TRANSPARENT
+            })
+            .cursor(Cursor::Pointer)
+            .align_child(Align::Center, Align::Center)
+            .on_hover(|hovered| {
+                if hovered {
+                    launcher::open_launcher_on_hover();
+                }
+            })
+            .on_click(|_| launcher::toggle())
+            .child(distro_icon()),
+    )];
     LayerWindow::new()
         .width(Full)
         .height(PANEL_HEIGHT)
@@ -246,29 +306,11 @@ pub fn panel() -> LayerWindow {
                 })
                 .child(
                     Stack::new(children![
-                        Row::new(children![
-                            Rectangle::new()
-                                .width(26.0)
-                                .height(Parent)
-                                .fill(if launcher_active {
-                                    aether::Color::BLACK
-                                } else {
-                                    aether::Color::TRANSPARENT
-                                })
-                                .cursor(Cursor::Pointer)
-                                .align_child(Align::Center, Align::Center)
-                                .on_hover(|hovered| {
-                                    if hovered {
-                                        launcher::open_launcher_on_hover();
-                                    }
-                                })
-                                .on_click(|_| launcher::toggle())
-                                .child(distro_icon()),
-                        ])
-                        .width(26.0)
-                        .height(Parent)
-                        .align(Align::Center)
-                        .justify(Start),
+                        Row::new(left_items)
+                            .width(Parent)
+                            .height(Parent)
+                            .align(Align::Center)
+                            .justify(Start),
                         Row::new(children![
                             Text::new(today)
                                 .font("Maple Mono")
