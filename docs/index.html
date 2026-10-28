@@ -1,0 +1,191 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="theme-color" content="#0b0c10">
+    <meta name="description" content="Aether is a Rust-powered Wayland desktop built around labwc: a thoughtful shell, useful system controls, and a focused Linux experience.">
+    <title>Aether — a Rust-powered Wayland desktop</title>
+    <link rel="icon" type="image/svg+xml" href="aether.svg">
+    <link rel="stylesheet" href="style.css">
+  </head>
+  <body id="top">
+    <header class="site-header">
+      <a class="brand" href="#top" aria-label="Aether home">
+        <span class="brand-mark" aria-hidden="true">
+          <svg viewBox="0 0 40 40" fill="none">
+            <path d="M20 4 36 33H4L20 4Z" stroke="currentColor" stroke-width="2.4" stroke-linejoin="round"/>
+            <path d="m20 13 10.5 19H9.5L20 13Z" fill="currentColor" fill-opacity=".12"/>
+            <path d="m14 26 6-10 6 10" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        </span>
+        <span>AETHER</span>
+      </a>
+      <nav class="nav-links" aria-label="Main navigation">
+        <a href="#about">About</a>
+        <a href="#features">Features</a>
+        <a href="#getting-started">Get started</a>
+      </nav>
+      <a class="github-link" href="https://github.com/jeganxthan/aether" target="_blank" rel="noreferrer">
+        GitHub <span aria-hidden="true">↗</span>
+      </a>
+    </header>
+
+    <main>
+      <section class="hero">
+        <div class="hero-copy">
+          <p class="eyebrow"><span class="status-dot"></span> A Linux desktop in the making</p>
+          <h1>A calmer way<br>to <span>work in Linux.</span></h1>
+          <p class="hero-description">
+            Aether is a Rust-powered Wayland desktop built around labwc.
+            Thoughtful system controls, a native shell, and a desktop that stays out of your way.
+          </p>
+          <div class="hero-actions">
+            <a class="button button-primary" href="#getting-started">Explore the project <span aria-hidden="true">↓</span></a>
+            <a class="button button-secondary" href="https://github.com/jeganxthan/aether" target="_blank" rel="noreferrer">View on GitHub <span aria-hidden="true">↗</span></a>
+          </div>
+          <div class="hero-meta">
+            <span><i></i> Built with Rust</span>
+            <span><i></i> Wayland native</span>
+            <span><i></i> Powered by labwc</span>
+          </div>
+        </div>
+
+        <div class="desktop-art" role="img" aria-label="Illustration of the Aether desktop with a top panel and a sound on-screen display">
+          <div class="ambient ambient-one"></div>
+          <div class="ambient ambient-two"></div>
+          <div class="desktop-window">
+            <div class="window-glow"></div>
+            <div class="window-orbit orbit-one"></div>
+            <div class="window-orbit orbit-two"></div>
+            <div class="window-center">
+              <span class="window-symbol">
+                <svg viewBox="0 0 40 40" fill="none" aria-hidden="true">
+                  <path d="M20 4 36 33H4L20 4Z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/>
+                  <path d="m14 26 6-10 6 10" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+                </svg>
+              </span>
+              <span class="window-wordmark">AETHER</span>
+              <span class="window-caption">A desktop with room to think.</span>
+            </div>
+            <div class="mock-panel">
+              <span class="panel-brand"><b>A</b> aether</span>
+              <span class="panel-icons" aria-hidden="true">
+                <svg viewBox="0 0 24 24"><path d="M5 10v4h3l5 4V6l-5 4H5Z"/><path d="M17 9a5 5 0 0 1 0 6M19.5 6.5a9 9 0 0 1 0 11"/></svg>
+                <svg viewBox="0 0 24 24"><path d="M12 3v18M5 7h14M5 17h14"/><circle cx="8" cy="7" r="2"/><circle cx="16" cy="17" r="2"/></svg>
+                <span>12:48</span>
+              </span>
+            </div>
+            <div class="volume-osd">
+              <span class="sound-icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24"><path d="M11 5 6 9H3v6h3l5 4V5ZM15.5 8.5a5 5 0 0 1 0 7M18 5.5a9 9 0 0 1 0 13"/></svg>
+              </span>
+              <span class="volume-track"><i></i></span>
+              <span class="volume-value">68%</span>
+            </div>
+          </div>
+          <div class="art-label"><span></span> A small window into Aether</div>
+        </div>
+      </section>
+
+      <section class="principles" aria-label="Project principles">
+        <div><span class="principle-number">01</span><span>Native to Wayland</span></div>
+        <div><span class="principle-number">02</span><span>Rust at the shell</span></div>
+        <div><span class="principle-number">03</span><span>Composed around labwc</span></div>
+      </section>
+
+      <section class="section about-section" id="about">
+        <div class="section-heading">
+          <p class="eyebrow">The idea</p>
+          <h2>One desktop.<br><span>Thoughtfully put together.</span></h2>
+        </div>
+        <div class="about-copy">
+          <p>
+            Aether pairs <strong>labwc</strong>, a lightweight Wayland compositor,
+            with a purpose-built desktop shell written in <strong>Rust</strong>.
+            The shell brings the everyday pieces together: a panel, quick controls,
+            notifications, settings, and clear feedback when system settings change.
+          </p>
+          <p class="small-note">
+            The compositor remains labwc; Rust powers Aether’s shell, UI toolkit,
+            and system services. Each part can evolve without pretending to be the other.
+          </p>
+        </div>
+      </section>
+
+      <section class="section feature-section" id="features">
+        <div class="section-title-row">
+          <div>
+            <p class="eyebrow">Made for the everyday</p>
+            <h2>Useful by design.</h2>
+          </div>
+          <p class="section-summary">A growing set of native desktop essentials, designed to feel like one system.</p>
+        </div>
+        <div class="feature-grid">
+          <article class="feature-card">
+            <span class="feature-icon icon-panel" aria-hidden="true">⌘</span>
+            <h3>A native shell</h3>
+            <p>A Wayland panel with focused popups for network, Bluetooth, battery, media, and notifications.</p>
+            <span class="feature-tag">RUST · WAYLAND</span>
+          </article>
+          <article class="feature-card">
+            <span class="feature-icon icon-osd" aria-hidden="true">◉</span>
+            <h3>Clear feedback</h3>
+            <p>Compact on-screen displays for volume, brightness, microphone mute, and keyboard lighting.</p>
+            <span class="feature-tag">RESPONSIVE OSD</span>
+          </article>
+          <article class="feature-card">
+            <span class="feature-icon icon-settings" aria-hidden="true">◌</span>
+            <h3>System controls</h3>
+            <p>Native services and a Tauri settings app bring common desktop settings together.</p>
+            <span class="feature-tag">RUST · TAURI</span>
+          </article>
+          <article class="feature-card">
+            <span class="feature-icon icon-labwc" aria-hidden="true">⌁</span>
+            <h3>Built around labwc</h3>
+            <p>An optional labwc-based session with vendored SceneFX support, built separately from the Rust shell.</p>
+            <span class="feature-tag">WAYLAND COMPOSITOR</span>
+          </article>
+        </div>
+      </section>
+
+      <section class="architecture">
+        <div class="architecture-copy">
+          <p class="eyebrow">A few focused parts</p>
+          <h2>Different layers.<br><span>One desktop.</span></h2>
+          <p>The shell, its UI, system integrations, and compositor each have a clear role. Explore the source to see how they fit together.</p>
+          <a class="text-link" href="https://github.com/jeganxthan/aether" target="_blank" rel="noreferrer">Explore the codebase <span aria-hidden="true">↗</span></a>
+        </div>
+        <div class="architecture-stack" aria-label="Aether architecture">
+          <div class="stack-row stack-shell"><span class="stack-index">01</span><span><b>Aether Shell</b><small>Panel · popups · notifications</small></span><em>RUST</em></div>
+          <div class="stack-row stack-ui"><span class="stack-index">02</span><span><b>Aether UI</b><small>Wayland widgets · rendering</small></span><em>RUST</em></div>
+          <div class="stack-row stack-services"><span class="stack-index">03</span><span><b>Aether Services</b><small>System integrations</small></span><em>RUST</em></div>
+          <div class="stack-row stack-compositor"><span class="stack-index">04</span><span><b>labwc + SceneFX</b><small>Window management · compositing</small></span><em>WAYLAND</em></div>
+        </div>
+      </section>
+
+      <section class="get-started" id="getting-started">
+        <div class="get-started-copy">
+          <p class="eyebrow">Curious? Come take a look.</p>
+          <h2>Follow the build.<br><span>Help shape what’s next.</span></h2>
+          <p>Aether is an active project. Start with the repository guide for build notes, current scope, and the labwc session setup.</p>
+        </div>
+        <div class="get-started-actions">
+          <a class="button button-primary" href="https://github.com/jeganxthan/aether" target="_blank" rel="noreferrer">Open the repository <span aria-hidden="true">↗</span></a>
+          <a class="text-link" href="https://github.com/jeganxthan/aether/blob/main/aether-labwc/README.md" target="_blank" rel="noreferrer">Read the labwc setup guide <span aria-hidden="true">↗</span></a>
+        </div>
+      </section>
+    </main>
+
+    <footer class="site-footer">
+      <a class="brand footer-brand" href="#top" aria-label="Aether home">
+        <span class="brand-mark" aria-hidden="true">
+          <svg viewBox="0 0 40 40" fill="none"><path d="M20 4 36 33H4L20 4Z" stroke="currentColor" stroke-width="2.4" stroke-linejoin="round"/><path d="m14 26 6-10 6 10" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </span>
+        <span>AETHER</span>
+      </a>
+      <p>Made for Linux. Built in the open.</p>
+      <a href="https://github.com/jeganxthan/aether" target="_blank" rel="noreferrer">GitHub <span aria-hidden="true">↗</span></a>
+    </footer>
+  </body>
+</html>
