@@ -6,19 +6,13 @@
     <meta name="theme-color" content="#0b0c10">
     <meta name="description" content="Aether is a Rust-powered Wayland desktop built around labwc: a thoughtful shell, useful system controls, and a focused Linux experience.">
     <title>Aether — a Rust-powered Wayland desktop</title>
-    <link rel="icon" type="image/svg+xml" href="aether.svg">
+    <link rel="icon" type="image/png" href="aether.png">
     <link rel="stylesheet" href="style.css">
   </head>
   <body id="top">
     <header class="site-header">
       <a class="brand" href="#top" aria-label="Aether home">
-        <span class="brand-mark" aria-hidden="true">
-          <svg viewBox="0 0 40 40" fill="none">
-            <path d="M20 4 36 33H4L20 4Z" stroke="currentColor" stroke-width="2.4" stroke-linejoin="round"/>
-            <path d="m20 13 10.5 19H9.5L20 13Z" fill="currentColor" fill-opacity=".12"/>
-            <path d="m14 26 6-10 6 10" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/>
-          </svg>
-        </span>
+        <img class="brand-logo" src="aether.png" alt="">
         <span>AETHER</span>
       </a>
       <nav class="nav-links" aria-label="Main navigation">
@@ -51,22 +45,14 @@
           </div>
         </div>
 
-        <div class="desktop-art" role="img" aria-label="Illustration of the Aether desktop with a top panel and a sound on-screen display">
+        <div class="desktop-art" role="img" aria-label="Aether desktop concept with the Aether logo and panel">
           <div class="ambient ambient-one"></div>
           <div class="ambient ambient-two"></div>
           <div class="desktop-window">
-            <div class="window-glow"></div>
-            <div class="window-orbit orbit-one"></div>
-            <div class="window-orbit orbit-two"></div>
             <div class="window-center">
-              <span class="window-symbol">
-                <svg viewBox="0 0 40 40" fill="none" aria-hidden="true">
-                  <path d="M20 4 36 33H4L20 4Z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/>
-                  <path d="m14 26 6-10 6 10" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
-                </svg>
-              </span>
+              <img class="hero-logo" src="aether.png" alt="">
               <span class="window-wordmark">AETHER</span>
-              <span class="window-caption">A desktop with room to think.</span>
+              <span class="window-caption">A Wayland desktop, built in the open.</span>
             </div>
             <div class="mock-panel">
               <span class="panel-brand"><b>A</b> aether</span>
@@ -76,15 +62,8 @@
                 <span>12:48</span>
               </span>
             </div>
-            <div class="volume-osd">
-              <span class="sound-icon" aria-hidden="true">
-                <svg viewBox="0 0 24 24"><path d="M11 5 6 9H3v6h3l5 4V5ZM15.5 8.5a5 5 0 0 1 0 7M18 5.5a9 9 0 0 1 0 13"/></svg>
-              </span>
-              <span class="volume-track"><i></i></span>
-              <span class="volume-value">68%</span>
-            </div>
           </div>
-          <div class="art-label"><span></span> A small window into Aether</div>
+          <div class="art-label"><span></span> Linux desktop · Wayland · Rust</div>
         </div>
       </section>
 
@@ -97,18 +76,19 @@
       <section class="section about-section" id="about">
         <div class="section-heading">
           <p class="eyebrow">The idea</p>
-          <h2>One desktop.<br><span>Thoughtfully put together.</span></h2>
+          <h2>A complete desktop,<br><span>built one layer at a time.</span></h2>
         </div>
         <div class="about-copy">
           <p>
             Aether pairs <strong>labwc</strong>, a lightweight Wayland compositor,
             with a purpose-built desktop shell written in <strong>Rust</strong>.
-            The shell brings the everyday pieces together: a panel, quick controls,
-            notifications, settings, and clear feedback when system settings change.
+            Aether brings the daily essentials into one cohesive workspace: a native panel,
+            quick access to system controls, rich notifications, media controls, and a dedicated
+            settings app.
           </p>
           <p class="small-note">
-            The compositor remains labwc; Rust powers Aether’s shell, UI toolkit,
-            and system services. Each part can evolve without pretending to be the other.
+            The compositor remains labwc. Rust powers Aether’s shell, UI toolkit, and system
+            services—clear boundaries, working together as one desktop.
           </p>
         </div>
       </section>
@@ -116,35 +96,47 @@
       <section class="section feature-section" id="features">
         <div class="section-title-row">
           <div>
-            <p class="eyebrow">Made for the everyday</p>
-            <h2>Useful by design.</h2>
+            <p class="eyebrow">A desktop, not just a panel</p>
+            <h2>Tools for the whole session.</h2>
           </div>
-          <p class="section-summary">A growing set of native desktop essentials, designed to feel like one system.</p>
+          <p class="section-summary">Aether connects the controls and utilities you use every day—without hiding the system underneath.</p>
         </div>
         <div class="feature-grid">
           <article class="feature-card">
             <span class="feature-icon icon-panel" aria-hidden="true">⌘</span>
-            <h3>A native shell</h3>
-            <p>A Wayland panel with focused popups for network, Bluetooth, battery, media, and notifications.</p>
-            <span class="feature-tag">RUST · WAYLAND</span>
+            <h3>One place for system controls</h3>
+            <p>Manage Wi-Fi, Bluetooth, sound, displays, and power from focused, purpose-built controls.</p>
+            <span class="feature-tag">CONNECTIVITY · DEVICES · POWER</span>
           </article>
           <article class="feature-card">
-            <span class="feature-icon icon-osd" aria-hidden="true">◉</span>
-            <h3>Clear feedback</h3>
-            <p>Compact on-screen displays for volume, brightness, microphone mute, and keyboard lighting.</p>
-            <span class="feature-tag">RESPONSIVE OSD</span>
+            <span class="feature-icon icon-notifications" aria-hidden="true">◌</span>
+            <h3>Notifications with context</h3>
+            <p>Keep messages in a notification center, tune out interruptions, and get useful battery and network alerts.</p>
+            <span class="feature-tag">HISTORY · DO NOT DISTURB · ALERTS</span>
           </article>
           <article class="feature-card">
-            <span class="feature-icon icon-settings" aria-hidden="true">◌</span>
-            <h3>System controls</h3>
-            <p>Native services and a Tauri settings app bring common desktop settings together.</p>
-            <span class="feature-tag">RUST · TAURI</span>
+            <span class="feature-icon icon-settings" aria-hidden="true">◉</span>
+            <h3>A settings app that does real work</h3>
+            <p>Arrange displays, set wallpapers and themes, choose audio devices, and adjust desktop settings.</p>
+            <span class="feature-tag">DISPLAY · SOUND · APPEARANCE</span>
+          </article>
+          <article class="feature-card">
+            <span class="feature-icon icon-media" aria-hidden="true">♫</span>
+            <h3>Media that follows you</h3>
+            <p>See what is playing and control playback from the shell with previous, play, next, and seek actions.</p>
+            <span class="feature-tag">MPRIS · PLAYBACK CONTROLS</span>
+          </article>
+          <article class="feature-card">
+            <span class="feature-icon icon-tools" aria-hidden="true">⌕</span>
+            <h3>Handy desktop utilities</h3>
+            <p>Capture the screen or a selection, copy text with OCR, and pick a color from anywhere on screen.</p>
+            <span class="feature-tag">SCREENSHOTS · OCR · COLOR PICKER</span>
           </article>
           <article class="feature-card">
             <span class="feature-icon icon-labwc" aria-hidden="true">⌁</span>
-            <h3>Built around labwc</h3>
-            <p>An optional labwc-based session with vendored SceneFX support, built separately from the Rust shell.</p>
-            <span class="feature-tag">WAYLAND COMPOSITOR</span>
+            <h3>Your Wayland foundation</h3>
+            <p>Run the Rust shell with labwc, or build the optional Aether labwc session with vendored SceneFX support.</p>
+            <span class="feature-tag">LABWC · SCENEFX · WAYLAND</span>
           </article>
         </div>
       </section>
@@ -179,9 +171,7 @@
 
     <footer class="site-footer">
       <a class="brand footer-brand" href="#top" aria-label="Aether home">
-        <span class="brand-mark" aria-hidden="true">
-          <svg viewBox="0 0 40 40" fill="none"><path d="M20 4 36 33H4L20 4Z" stroke="currentColor" stroke-width="2.4" stroke-linejoin="round"/><path d="m14 26 6-10 6 10" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
-        </span>
+        <img class="brand-logo" src="aether.png" alt="">
         <span>AETHER</span>
       </a>
       <p>Made for Linux. Built in the open.</p>

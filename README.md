@@ -34,13 +34,18 @@ revisions, and license details are documented in
 
 ## Highlights
 
-- Wayland desktop shell designed to run with labwc.
-- Panel and quick-access popups for Wi-Fi, Bluetooth, battery, notifications,
-  media, and settings.
-- Volume, screen-brightness, microphone-mute, and keyboard-backlight OSDs.
-- Light and dark shell themes.
-- Rust services for desktop integrations and utilities.
-- An optional, separately installed labwc + SceneFX session.
+- **Everyday system controls:** Connect to Wi-Fi, manage Bluetooth, choose
+  audio devices, adjust display settings, and switch power profiles.
+- **Display and appearance settings:** Arrange displays, change resolution and
+  scale, choose wallpapers, and switch between light and dark themes.
+- **Notifications and device awareness:** Review notifications, use
+  do-not-disturb, and receive battery and network alerts.
+- **Media controls:** View the current player and control playback from the
+  shell.
+- **Screen utilities:** Take full or selective screenshots, extract text from
+  a selected area with OCR, and pick a color from the screen.
+- **A native Wayland shell:** A Rust panel, quick-access popups, system
+  integrations, and an optional labwc + SceneFX session.
 
 ## Project layout
 
