@@ -1,4 +1,5 @@
-import { Check } from "lucide-react";
+import { useState } from "react";
+import { Check, ImageOff } from "lucide-react";
 import { convertFileSrc } from "@tauri-apps/api/core";
 import type { Wallpaper } from "../../services/wallpaper";
 
@@ -15,6 +16,9 @@ export default function WallpaperCard({
   onSelect,
   disabled = false,
 }: WallpaperCardProps) {
+  const [imageFailed, setImageFailed] = useState(false);
+  const imageUrl = convertFileSrc(wallpaper.path);
+
   return (
     <button
       type="button"
@@ -32,12 +36,26 @@ export default function WallpaperCard({
       ].join(" ")}
     >
       <div className="relative aspect-video overflow-hidden bg-white/[0.04]">
-        <img
-          src={convertFileSrc(wallpaper.path)}
-          alt={wallpaper.name}
-          loading="lazy"
-          className="h-full w-full object-cover transition duration-300 group-hover:scale-[1.03]"
-        />
+        {!imageFailed ? (
+          <img
+            src={imageUrl}
+            alt={wallpaper.name}
+            loading="lazy"
+            onError={() => {
+              console.error("Wallpaper image failed to load:", {
+                path: wallpaper.path,
+                url: imageUrl,
+              });
+              setImageFailed(true);
+            }}
+            className="h-full w-full object-cover transition duration-300 group-hover:scale-[1.03]"
+          />
+        ) : (
+          <div className="flex h-full w-full flex-col items-center justify-center gap-2 text-neutral-500">
+            <ImageOff size={24} />
+            <span className="text-xs">Preview unavailable</span>
+          </div>
+        )}
 
         {selected && (
           <span className="absolute right-2 top-2 flex h-6 w-6 items-center justify-center rounded-full bg-black/75 text-white">

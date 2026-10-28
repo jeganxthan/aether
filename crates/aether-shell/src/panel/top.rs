@@ -14,6 +14,7 @@ use crate::panel::svg::wifi_svg::WifiSignalIcon;
 use crate::services::battery::battery;
 use crate::services::bluetooth as bt_service;
 use crate::services::clock::{clock, date};
+use crate::services::display;
 use crate::services::player::player;
 use crate::services::wifi::{ethernet_connected, wifi};
 use crate::theme::theme;
@@ -21,6 +22,8 @@ use crate::theme::theme;
 pub const PANEL_HEIGHT: f32 = 26.0;
 const ICON_SIZE: f32 = 14.0;
 const PLAYER_HIT_WIDTH: f32 = 22.0;
+const NOTIFICATION_HIT_WIDTH: f32 = 22.0;
+const NOTIFICATION_SETTINGS_GAP: f32 = 4.0;
 
 const BATTERY_ICON_SIZE: f32 = 14.0;
 
@@ -40,8 +43,10 @@ const CLOCK_SIZE: f32 = 12.0;
 
 // keeps the centered clock and edge icons off the screen edge
 const EDGE_INSET: f32 = 12.0;
+pub const NOTIFICATION_EDGE_RIGHT: f32 = EDGE_INSET + PLAYER_HIT_WIDTH + NOTIFICATION_SETTINGS_GAP;
 
-pub fn panel() -> LayerWindow {
+pub fn panel(monitor: &aether::Monitor) -> LayerWindow {
+    display::watch_primary_display();
     let theme = theme();
 
     let time = clock();
@@ -207,7 +212,6 @@ pub fn panel() -> LayerWindow {
         Rectangle::new().width(ICON_GAP).height(1.0).fill(theme.bar),
     ));
 
-    let notification_count = crate::services::notifications::active_notifications().len();
     let notification_hovered = crate::panel::component::notification_menu::hovered()
         || crate::panel::component::notification_menu::open();
     let notification_icon = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join(
@@ -219,7 +223,7 @@ pub fn panel() -> LayerWindow {
     );
     right_items.push(Box::new(
         Rectangle::new()
-            .width(48.0)
+            .width(NOTIFICATION_HIT_WIDTH)
             .height(Parent)
             .fill(if notification_hovered {
                 aether::Color::BLACK
@@ -230,27 +234,15 @@ pub fn panel() -> LayerWindow {
             .align_child(Align::Center, Align::Center)
             .on_hover(crate::panel::component::notification_menu::set_hovered)
             .on_click(|_| crate::panel::component::notification_menu::toggle_open())
-            .child(
-                Row::new(children![
-                    Rectangle::new().width(ICON_SIZE).height(ICON_SIZE).fill(
-                        crate::panel::svg::recolor::ink_image(notification_icon, theme.icon,)
-                    ),
-                    Text::new(if notification_hovered {
-                        notification_count.to_string()
-                    } else {
-                        String::new()
-                    })
-                    .font("Maple Mono")
-                    .color(theme.bar_text)
-                    .size(10.0),
-                ])
-                .height(Parent)
-                .gap(6.0)
-                .align(Align::Center),
-            ),
+            .child(Rectangle::new().width(ICON_SIZE).height(ICON_SIZE).fill(
+                crate::panel::svg::recolor::ink_image(notification_icon, theme.icon),
+            )),
     ));
     right_items.push(Box::new(
-        Rectangle::new().width(6.0).height(1.0).fill(theme.bar),
+        Rectangle::new()
+            .width(NOTIFICATION_SETTINGS_GAP)
+            .height(1.0)
+            .fill(theme.bar),
     ));
 
     let settings_icon = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
@@ -292,6 +284,13 @@ pub fn panel() -> LayerWindow {
         .anchor_vertical(Vertical::Top)
         .layer(Layer::Top)
         .space(Zone::Reserve)
+        .visible(display::is_primary(
+            &monitor.name,
+            monitor.x,
+            monitor.y,
+            &monitor.outputs,
+            monitor.origin_output.as_deref(),
+        ))
         .namespace("aether-panel")
         .child(
             Rectangle::new()

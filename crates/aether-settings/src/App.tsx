@@ -6,10 +6,11 @@ import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import Sidebar, {
   type SettingsPage,
 } from "./components/Sidebar";
-
+import Display from "./pages/Display";
 import BluetoothPage from "./pages/Bluetooth";
 import WifiPage from "./pages/Wifi";
 import Appearance from "./pages/Appearance";
+import Sound from "./pages/Sound";
 
 export default function App() {
   const [activePage, setActivePage] =
@@ -78,9 +79,8 @@ export default function App() {
 
   return (
     <main
-      className={`flex h-full w-full overflow-hidden bg-black/30 text-neutral-100 backdrop-blur-[38px] backdrop-saturate-150 ${
-        rounded ? "rounded-4xl" : "rounded-none"
-      }`}
+      className={`flex h-full w-full overflow-hidden bg-black/30 text-neutral-100 backdrop-blur-[38px] backdrop-saturate-150 ${rounded ? "rounded-4xl" : "rounded-none"
+        }`}
     >
       <Sidebar
         activePage={activePage}
@@ -94,6 +94,10 @@ export default function App() {
           <WifiPage active={true} />
         ) : activePage === "Appearance" ? (
           <Appearance />
+        ) : activePage === "Display" ? (
+          <Display />
+        ) : activePage === "Sound" ? (
+          <Sound />
         ) : (
           <>
             <h1 className="text-[30px] font-semibold tracking-[-0.8px]">

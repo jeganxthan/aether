@@ -19,9 +19,6 @@ const DEFAULT_TIMEOUT: Duration = Duration::from_secs(5);
 // how long the slide in or out takes
 pub const SLIDE_TIME: Duration = Duration::from_millis(260);
 
-// the part of the whole slide one frame covers, aimed at a 16ms frame
-pub const STEP: f32 = 16.0 / SLIDE_TIME.as_millis() as f32;
-
 // how long a card takes to brighten under the pointer and to settle back
 pub const HOVER_TIME: Duration = Duration::from_millis(140);
 
@@ -34,6 +31,8 @@ struct Popup {
 
     // 0 while shown, one popup width off to the right once slid out
     offset: f32,
+    slide_from: f32,
+    slide_started_at: Instant,
 
     // true once the pointer has pinned it open, so the timeout leaves it alone
     pinned: bool,
@@ -199,8 +198,7 @@ pub fn dismiss(id: u32) {
     let mut popups = store().lock().unwrap_or_else(PoisonError::into_inner);
 
     if let Some(popup) = popups.iter_mut().find(|popup| popup.notification.id == id) {
-        popup.leaving = true;
-        popup.expired_at = Instant::now();
+        begin_leaving(popup, Instant::now());
         drop(popups);
         close_notification(id);
         refresh();
@@ -288,6 +286,8 @@ fn handle(event: NotificationEvent) -> bool {
             popups.push_back(Popup {
                 notification,
                 offset: 1.0,
+                slide_from: 1.0,
+                slide_started_at: Instant::now(),
                 pinned: false,
                 leaving: false,
                 expired_at,
@@ -307,8 +307,7 @@ fn handle(event: NotificationEvent) -> bool {
         // the sender closed it: slide it out rather than dropping it at once
         NotificationEvent::Closed { id, .. } => {
             if let Some(popup) = popups.iter_mut().find(|popup| popup.notification.id == id) {
-                popup.leaving = true;
-                popup.expired_at = Instant::now();
+                begin_leaving(popup, Instant::now());
             }
 
             history_changed
@@ -380,15 +379,13 @@ fn timeout_of(notification: &Notification) -> Duration {
  * keeps the window drawing until they arrive.
  */
 async fn animate() {
-    // a steady step, so a slide takes about SLIDE_TIME either way
-    let step = STEP;
-
     // and one for the hover, so a card brightens in about HOVER_TIME
     let hover_step = HOVER_STEP;
 
     loop {
         tokio::time::sleep(Duration::from_millis(16)).await;
 
+        let now = Instant::now();
         let mut changed = false;
 
         {
@@ -396,11 +393,15 @@ async fn animate() {
 
             for popup in popups.iter_mut() {
                 // a shown popup that has run out of time starts leaving
-                if !popup.leaving && !popup.pinned && Instant::now() >= popup.expired_at {
-                    popup.leaving = true;
+                if !popup.leaving && !popup.pinned && now >= popup.expired_at {
+                    begin_leaving(popup, now);
                 }
 
-                let next = advance(popup.offset, popup.leaving, step);
+                let next = slide_offset(
+                    popup.slide_from,
+                    popup.leaving,
+                    now.saturating_duration_since(popup.slide_started_at),
+                );
 
                 if next != popup.offset {
                     popup.offset = next;
@@ -442,12 +443,35 @@ async fn animate() {
     }
 }
 
-// the offset one frame later: towards flush once shown, off the edge once leaving
-fn advance(offset: f32, leaving: bool, step: f32) -> f32 {
-    if leaving {
-        f32::min(offset + step, 1.0)
+fn begin_leaving(popup: &mut Popup, now: Instant) {
+    if popup.leaving {
+        return;
+    }
+
+    popup.offset = slide_offset(
+        popup.slide_from,
+        false,
+        now.saturating_duration_since(popup.slide_started_at),
+    );
+    popup.slide_from = popup.offset;
+    popup.slide_started_at = now;
+    popup.leaving = true;
+    popup.expired_at = now;
+}
+
+// Interpolate the visual offset by elapsed time, so delayed frames do not slow the slide.
+fn slide_offset(from: f32, leaving: bool, elapsed: Duration) -> f32 {
+    let progress = (elapsed.as_secs_f32() / SLIDE_TIME.as_secs_f32()).clamp(0.0, 1.0);
+    let eased = if leaving {
+        progress * progress
     } else {
-        f32::max(offset - step, 0.0)
+        1.0 - (1.0 - progress).powi(3)
+    };
+
+    if leaving {
+        from + (1.0 - from) * eased
+    } else {
+        from * (1.0 - eased)
     }
 }
 
@@ -513,21 +537,20 @@ mod tests {
     }
 
     #[test]
-    fn sliding_in_stops_flush_and_out_stops_at_the_edge() {
-        let step = STEP;
-
-        assert_eq!(advance(1.0, false, step), 1.0 - step);
-        assert_eq!(advance(0.0, false, step), 0.0);
-        assert_eq!(advance(0.9, true, 0.2), 1.0);
-        assert_eq!(advance(1.0, true, step), 1.0);
+    fn sliding_uses_smooth_elapsed_time_and_reaches_both_endpoints() {
+        assert_eq!(slide_offset(1.0, false, Duration::ZERO), 1.0);
+        assert_eq!(slide_offset(1.0, false, SLIDE_TIME), 0.0);
+        assert_eq!(slide_offset(0.0, true, Duration::ZERO), 0.0);
+        assert_eq!(slide_offset(0.0, true, SLIDE_TIME), 1.0);
+        assert!((slide_offset(1.0, false, SLIDE_TIME / 2) - 0.125).abs() < 1e-5);
+        assert!((slide_offset(0.0, true, SLIDE_TIME / 2) - 0.25).abs() < 1e-5);
     }
 
     #[test]
-    fn a_slide_covers_the_whole_way_in_about_slide_time() {
-        // one step per 16ms frame should cross in roughly SLIDE_TIME
-        let frames = (1.0 / STEP).ceil();
-        let taken = frames * 16.0;
+    fn reversing_a_slide_starts_from_its_current_position() {
+        let halfway_through_entry = slide_offset(1.0, false, SLIDE_TIME / 2);
+        let halfway_through_exit = slide_offset(halfway_through_entry, true, SLIDE_TIME);
 
-        assert!(taken <= SLIDE_TIME.as_millis() as f32 + 16.0);
+        assert_eq!(halfway_through_exit, 1.0);
     }
 }

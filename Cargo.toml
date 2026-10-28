@@ -5,7 +5,7 @@ edition = "2024"
 
 [workspace]
 members = [
-    "crates/aether-panel",
+    "crates/aether-shell",
     "crates/aether-services",
     "crates/aether-ui",
     "crates/aether-settings/src-tauri",

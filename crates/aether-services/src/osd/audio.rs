@@ -2,7 +2,10 @@ use std::{io, process::Command};
 
 const AUDIO_SINK: &str = "@DEFAULT_AUDIO_SINK@";
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+use serde::Serialize;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct AudioState {
     pub volume_percent: u8,
     pub muted: bool,

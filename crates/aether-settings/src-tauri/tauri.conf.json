@@ -5,7 +5,7 @@
   "identifier": "com.aether-settings",
   "build": {
     "beforeDevCommand": "npm run dev",
-    "devUrl": "http://localhost:1420",
+    "devUrl": "http://localhost:1520",
     "beforeBuildCommand": "npm run build",
     "frontendDist": "../dist"
   },
@@ -21,7 +21,11 @@
       }
     ],
     "security": {
-      "csp": null
+      "csp": null,
+       "assetProtocol": {
+        "enable": true,
+        "scope": ["$HOME/Pictures/**", "$HOME/Wallpapers/**"]
+      }
     }
   },
   "bundle": {

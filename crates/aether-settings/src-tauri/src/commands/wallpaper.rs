@@ -1,6 +1,7 @@
 use serde::{Deserialize, Serialize};
 use std::{
     fs,
+    hash::{Hash, Hasher},
     path::{Path, PathBuf},
     process::{Child, Command, Stdio},
     sync::Mutex,
@@ -53,16 +54,74 @@ fn validate_image(path: &Path) -> Result<PathBuf, String> {
     Ok(path)
 }
 
-fn apply_wallpaper(
-    state: &WallpaperState,
-    path: &Path,
-) -> Result<(), String> {
-    let path = validate_image(path)?;
+fn wallpaper_cache_dir() -> Result<PathBuf, String> {
+    let cache_dir = std::env::var_os("XDG_CACHE_HOME")
+        .map(PathBuf::from)
+        .or_else(|| std::env::var_os("HOME").map(|home| PathBuf::from(home).join(".cache")))
+        .ok_or("Could not determine the wallpaper cache directory")?
+        .join("aether-shell");
+    fs::create_dir_all(&cache_dir)
+        .map_err(|error| format!("Could not create wallpaper cache: {error}"))?;
+    Ok(cache_dir)
+}
 
+fn swaybg_image(path: &Path, cache_dir: &Path) -> Result<PathBuf, String> {
+    if !path
+        .extension()
+        .is_some_and(|extension| extension.eq_ignore_ascii_case("webp"))
+    {
+        return Ok(path.to_path_buf());
+    }
+
+    let metadata =
+        fs::metadata(path).map_err(|error| format!("Could not inspect WebP wallpaper: {error}"))?;
+    let modified = metadata
+        .modified()
+        .ok()
+        .and_then(|time| time.duration_since(std::time::UNIX_EPOCH).ok())
+        .map_or(0, |time| time.as_nanos());
+    let mut hasher = std::collections::hash_map::DefaultHasher::new();
+    path.hash(&mut hasher);
+    metadata.len().hash(&mut hasher);
+    modified.hash(&mut hasher);
+
+    let png_path = cache_dir.join(format!("wallpaper-{:016x}.png", hasher.finish()));
+    if png_path.is_file() {
+        return Ok(png_path);
+    }
+
+    let decoded = image::ImageReader::open(path)
+        .map_err(|error| format!("Could not open WebP wallpaper: {error}"))?
+        .with_guessed_format()
+        .map_err(|error| format!("Could not identify WebP wallpaper: {error}"))?
+        .decode()
+        .map_err(|error| format!("Could not decode WebP wallpaper: {error}"))?;
+
+    let temporary_path = png_path.with_extension("png.tmp");
+    decoded
+        .save_with_format(&temporary_path, image::ImageFormat::Png)
+        .map_err(|error| format!("Could not convert WebP wallpaper to PNG: {error}"))?;
+    fs::rename(&temporary_path, &png_path)
+        .map_err(|error| format!("Could not finish WebP wallpaper conversion: {error}"))?;
+
+    Ok(png_path)
+}
+
+fn apply_wallpaper(state: &WallpaperState, path: &Path) -> Result<(), String> {
+    let path = validate_image(path)?;
     let mut process = state
         .process
         .lock()
         .map_err(|_| "Wallpaper process lock is unavailable")?;
+
+    let display_path = if path
+        .extension()
+        .is_some_and(|extension| extension.eq_ignore_ascii_case("webp"))
+    {
+        swaybg_image(&path, &wallpaper_cache_dir()?)?
+    } else {
+        path.clone()
+    };
 
     if let Some(child) = process.as_mut() {
         let _ = child.kill();
@@ -70,7 +129,7 @@ fn apply_wallpaper(
     }
 
     let child = Command::new("swaybg")
-        .args(["-i", path.to_string_lossy().as_ref(), "-m", "fill"])
+        .args(["-i", display_path.to_string_lossy().as_ref(), "-m", "fill"])
         .stdin(Stdio::null())
         .stdout(Stdio::null())
         .stderr(Stdio::null())
@@ -149,10 +208,7 @@ pub fn wallpaper_folder() -> Result<String, String> {
 }
 
 #[tauri::command]
-pub fn wallpaper_restore(
-    app: AppHandle,
-    state: State<'_, WallpaperState>,
-) -> Result<(), String> {
+pub fn wallpaper_restore(app: AppHandle, state: State<'_, WallpaperState>) -> Result<(), String> {
     let Some(path) = wallpaper_current(app)? else {
         return Ok(());
     };
@@ -165,5 +221,32 @@ impl WallpaperState {
         Self {
             process: Mutex::new(None),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use image::GenericImageView;
+
+    #[test]
+    fn converts_webp_wallpaper_to_png_for_swaybg() {
+        let test_dir =
+            std::env::temp_dir().join(format!("aether-wallpaper-webp-test-{}", std::process::id()));
+        fs::create_dir_all(&test_dir).expect("create test directory");
+        let webp_path = test_dir.join("source.webp");
+        let source = image::DynamicImage::new_rgb8(2, 3);
+        source
+            .save_with_format(&webp_path, image::ImageFormat::WebP)
+            .expect("write WebP fixture");
+
+        let png_path = swaybg_image(&webp_path, &test_dir).expect("convert WebP fixture");
+        let converted = image::ImageReader::open(png_path)
+            .expect("open converted PNG")
+            .decode()
+            .expect("decode converted PNG");
+
+        assert_eq!(converted.dimensions(), (2, 3));
+        fs::remove_dir_all(test_dir).expect("remove test directory");
     }
 }

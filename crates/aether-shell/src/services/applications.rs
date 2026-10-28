@@ -217,6 +217,12 @@ impl ApplicationService {
                 Some(50)
             } else if comment_lower.contains(&query) {
                 Some(60)
+            } else if let Some(skipped) = subsequence_skips(&name_lower, &query) {
+                Some(70 + skipped.min(29) as u32)
+            } else if let Some(distance) = fuzzy_distance(&name_lower, &query) {
+                Some(100 + distance as u32)
+            } else if let Some(skipped) = subsequence_skips(&id_lower, &query) {
+                Some(120 + skipped.min(29) as u32)
             } else {
                 None
             };
@@ -261,6 +267,49 @@ impl ApplicationService {
             Err(error) => Err(error),
         }
     }
+}
+
+fn subsequence_skips(candidate: &str, query: &str) -> Option<usize> {
+    let mut chars = candidate.char_indices();
+    let mut last_position = None;
+    let mut skipped = 0;
+
+    for query_char in query.chars() {
+        let (position, _) = chars.find(|(_, candidate_char)| *candidate_char == query_char)?;
+        if let Some(previous) = last_position {
+            skipped += candidate[previous..position]
+                .chars()
+                .count()
+                .saturating_sub(1);
+        }
+        last_position = Some(position);
+    }
+
+    Some(skipped)
+}
+
+fn fuzzy_distance(candidate: &str, query: &str) -> Option<usize> {
+    let candidate: Vec<char> = candidate.chars().collect();
+    let query: Vec<char> = query.chars().collect();
+    if query.len() < 4 || candidate.len().abs_diff(query.len()) > 2 {
+        return None;
+    }
+
+    let mut previous: Vec<usize> = (0..=candidate.len()).collect();
+    let mut current = vec![0; candidate.len() + 1];
+
+    for (row, query_char) in query.iter().enumerate() {
+        current[0] = row + 1;
+        for (column, candidate_char) in candidate.iter().enumerate() {
+            current[column + 1] = (previous[column + 1] + 1)
+                .min(current[column] + 1)
+                .min(previous[column] + usize::from(query_char != candidate_char));
+        }
+        std::mem::swap(&mut previous, &mut current);
+    }
+
+    let distance = previous[candidate.len()];
+    (distance <= 2).then_some(distance)
 }
 
 #[derive(Default)]
@@ -370,4 +419,33 @@ fn command_exists(command: &str) -> bool {
     };
 
     env::split_paths(&path_env).any(|directory| directory.join(command).is_file())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn app(name: &str, id: &str) -> Application {
+        Application {
+            id: id.to_owned(),
+            name: name.to_owned(),
+            comment: None,
+            icon: None,
+            desktop_file: PathBuf::new(),
+        }
+    }
+
+    #[test]
+    fn launcher_search_matches_initials_and_small_typos() {
+        let service = ApplicationService {
+            applications: vec![
+                app("Brave", "brave-browser.desktop"),
+                app("Google Chrome", "google-chrome.desktop"),
+                app("Calculator", "calculator.desktop"),
+            ],
+        };
+
+        assert_eq!(service.search("Brv")[0].name, "Brave");
+        assert_eq!(service.search("gogle")[0].name, "Google Chrome");
+    }
 }

@@ -1,16 +1,12 @@
 mod commands;
-
+use commands::display::{display_apply, display_list, display_primary_get, display_primary_set};
+use commands::wallpaper::{
+    WallpaperState, wallpaper_current, wallpaper_folder, wallpaper_list, wallpaper_restore,
+    wallpaper_set,
+};
 use std::sync::{
     Arc, Mutex,
     atomic::{AtomicBool, Ordering},
-};
-use commands::wallpaper::{
-    WallpaperState,
-    wallpaper_current,
-    wallpaper_folder,
-    wallpaper_list,
-    wallpaper_restore,
-    wallpaper_set,
 };
 use tauri::{Emitter, Manager};
 
@@ -385,36 +381,46 @@ mod background_blur {
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
-    .manage(BlurStatus {
-        status: Arc::new(Mutex::new("Checking compositor blur support…".into())),
-        rounded: Arc::new(AtomicBool::new(true)),
+        .manage(BlurStatus {
+            status: Arc::new(Mutex::new("Checking compositor blur support…".into())),
+            rounded: Arc::new(AtomicBool::new(true)),
 
-        #[cfg(target_os = "linux")]
-        effect: Arc::new(Mutex::new(None)),
-    })
-    // Add this immediately after BlurStatus:
-    .manage(WallpaperState::new())
-    .plugin(tauri_plugin_opener::init())
-    .invoke_handler(tauri::generate_handler![
-        commands::wifi::wifi_is_enabled,
-        commands::wifi::wifi_set_enabled,
-        commands::wifi::wifi_scan_networks,
-        get_blur_status,
-        window_is_rounded,
-        commands::bluetooth::bluetooth_status,
-        commands::bluetooth::bluetooth_set_enabled,
-        commands::bluetooth::bluetooth_devices,
-        commands::bluetooth::bluetooth_start_scan,
-        commands::bluetooth::bluetooth_stop_scan,
-        commands::bluetooth::bluetooth_pair,
-        commands::bluetooth::bluetooth_connect,
-        commands::bluetooth::bluetooth_disconnect,
-        wallpaper_list,
-        wallpaper_current,
-        wallpaper_folder,
-        wallpaper_set,
-        wallpaper_restore,
-    ])
+            #[cfg(target_os = "linux")]
+            effect: Arc::new(Mutex::new(None)),
+        })
+        // Add this immediately after BlurStatus:
+        .manage(WallpaperState::new())
+        .plugin(tauri_plugin_opener::init())
+        .plugin(tauri_plugin_dialog::init())
+        .invoke_handler(tauri::generate_handler![
+            commands::wifi::wifi_is_enabled,
+            commands::wifi::wifi_set_enabled,
+            commands::wifi::wifi_scan_networks,
+            get_blur_status,
+            window_is_rounded,
+            commands::bluetooth::bluetooth_status,
+            commands::bluetooth::bluetooth_set_enabled,
+            commands::bluetooth::bluetooth_devices,
+            commands::bluetooth::bluetooth_start_scan,
+            commands::bluetooth::bluetooth_stop_scan,
+            commands::bluetooth::bluetooth_pair,
+            commands::bluetooth::bluetooth_connect,
+            commands::bluetooth::bluetooth_disconnect,
+            wallpaper_list,
+            wallpaper_current,
+            wallpaper_folder,
+            wallpaper_set,
+            wallpaper_restore,
+            display_list,
+            display_apply,
+            display_primary_get,
+            display_primary_set,
+            commands::sound::sound_get_state,
+            commands::sound::sound_set_volume,
+            commands::sound::sound_toggle_mute,
+            commands::sound::sound_increase_volume,
+            commands::sound::sound_decrease_volume,
+        ])
         .setup(|app| {
             #[cfg(target_os = "linux")]
             {

@@ -2,6 +2,7 @@ pub mod applications;
 pub mod battery;
 pub mod bluetooth;
 pub mod clock;
+pub mod display;
 pub mod notifications;
 pub mod osd;
 pub mod player;

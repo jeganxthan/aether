@@ -20,7 +20,10 @@ impl OutputHandler for WaylandState {
             return;
         };
 
-        let monitor = describe(&info, self.scale_factor);
+        let (output_names, origin_output) = self.output_layout(None);
+        let mut monitor = describe(&info, self.scale_factor);
+        monitor.outputs = output_names.clone();
+        monitor.origin_output = origin_output.clone();
 
         let views = self.per_monitor.clone();
 
@@ -29,6 +32,8 @@ impl OutputHandler for WaylandState {
 
             self.open(view, Some(output.clone()));
         }
+
+        self.update_monitor_outputs(&output_names, origin_output.as_deref());
 
         // a monitor plugged in while locked needs a lock screen too
         self.open_lock(output);
@@ -39,7 +44,10 @@ impl OutputHandler for WaylandState {
             return;
         };
 
-        let monitor = describe(&info, self.scale_factor);
+        let (output_names, origin_output) = self.output_layout(None);
+        let mut monitor = describe(&info, self.scale_factor);
+        monitor.outputs = output_names.clone();
+        monitor.origin_output = origin_output.clone();
 
         for window in &mut self.windows {
             if window.output.as_ref() != Some(&output) {
@@ -52,12 +60,54 @@ impl OutputHandler for WaylandState {
 
             window.request_frame();
         }
+
+        self.update_monitor_outputs(&output_names, origin_output.as_deref());
     }
 
     // dropping a window destroys its layer surface
     fn output_destroyed(&mut self, _: &Connection, _: &QueueHandle<Self>, output: WlOutput) {
         self.windows
             .retain(|window| window.output.as_ref() != Some(&output));
+
+        let (output_names, origin_output) = self.output_layout(Some(&output));
+        self.update_monitor_outputs(&output_names, origin_output.as_deref());
+    }
+}
+
+impl WaylandState {
+    fn output_layout(&self, excluding: Option<&WlOutput>) -> (Vec<String>, Option<String>) {
+        let mut names = Vec::new();
+        let mut origin_output = None;
+
+        for output in self
+            .output
+            .outputs()
+            .filter(|output| excluding != Some(output))
+        {
+            let Some(info) = self.output.info(&output) else {
+                continue;
+            };
+            let Some(name) = info.name else {
+                continue;
+            };
+
+            if origin_output.is_none() && info.logical_position == Some((0, 0)) {
+                origin_output = Some(name.clone());
+            }
+            names.push(name);
+        }
+
+        (names, origin_output)
+    }
+
+    fn update_monitor_outputs(&mut self, output_names: &[String], origin_output: Option<&str>) {
+        for window in &mut self.windows {
+            if let View::Monitor(_, monitor) = &mut window.view {
+                monitor.outputs = output_names.to_vec();
+                monitor.origin_output = origin_output.map(str::to_owned);
+                window.request_frame();
+            }
+        }
     }
 }
 
@@ -78,6 +128,12 @@ pub fn describe(info: &OutputInfo, scale_factor: ScaleFactor) -> Monitor {
 
         width: scale_factor.logical(width).round() as u32,
         height: scale_factor.logical(height).round() as u32,
+        x: info.logical_position.map_or(0, |(x, _)| x),
+        y: info.logical_position.map_or(0, |(_, y)| y),
+        outputs: info.name.iter().cloned().collect(),
+        origin_output: (info.logical_position == Some((0, 0)))
+            .then(|| info.name.clone())
+            .flatten(),
     }
 }
 

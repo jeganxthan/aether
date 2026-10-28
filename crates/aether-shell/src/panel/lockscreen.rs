@@ -19,6 +19,18 @@ const ERROR: Color = Color::rgb(255, 112, 126);
 
 const PASSWORD_FIELD: &str = "aether-lock-password";
 
+const WALLPAPER_THUMBNAIL: (u32, u32) = (640, 360);
+const WALLPAPER_BLUR: u32 = 32;
+
+pub fn preload() {
+    if let Some(path) = lock_wallpaper() {
+        Image::cover(path)
+            .thumbnail(WALLPAPER_THUMBNAIL.0, WALLPAPER_THUMBNAIL.1)
+            .blurred(WALLPAPER_BLUR)
+            .preload();
+    }
+}
+
 pub fn view(_: &aether::Monitor) -> LayerWindow {
     let lock = aether::Lock::read();
     let time = clock::clock();
@@ -47,10 +59,11 @@ pub fn view(_: &aether::Monitor) -> LayerWindow {
                 .fill(BACKGROUND)
         },
         |path| {
-            Rectangle::new()
-                .width(Parent)
-                .height(Parent)
-                .fill(Image::cover(path).thumbnail(640, 360).blurred(32))
+            Rectangle::new().width(Parent).height(Parent).fill(
+                Image::cover(path)
+                    .thumbnail(WALLPAPER_THUMBNAIL.0, WALLPAPER_THUMBNAIL.1)
+                    .blurred(WALLPAPER_BLUR),
+            )
         },
     );
 

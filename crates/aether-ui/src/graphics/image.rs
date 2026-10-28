@@ -89,11 +89,24 @@ pub fn load(path: &Path, cover: Option<(u32, u32)>, blur: u32) -> Option<Arc<Bit
     None
 }
 
+pub fn preload(path: &Path, cover: Option<(u32, u32)>, blur: u32) {
+    let mut loaded = LOADED.lock().unwrap_or_else(PoisonError::into_inner);
+    let key = (path.to_path_buf(), cover, blur);
+
+    if loaded.contains_key(&key) {
+        return;
+    }
+
+    loaded.insert(key.clone(), None);
+    thread::spawn(move || decode(key));
+}
+
 fn decode(key: Key) {
     let (path, cover, blur) = &key;
 
     // a broken file stays empty instead of taking the shell down
     let Some(image) = read(path) else {
+        eprintln!("aether-ui: could not decode image {}", path.display());
         return;
     };
 
@@ -221,9 +234,12 @@ fn decode_jpeg(bytes: &[u8]) -> Option<Bitmap> {
 
     let mut decoder = JpegDecoder::new_with_options(ZCursor::new(bytes), options);
 
-    let pixels = decoder.decode().ok()?;
-
-    let info = decoder.info()?;
+    let Ok(pixels) = decoder.decode() else {
+        return decode_other(bytes);
+    };
+    let Some(info) = decoder.info() else {
+        return decode_other(bytes);
+    };
 
     let bitmap = Bitmap {
         width: u32::from(info.width),

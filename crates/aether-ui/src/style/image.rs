@@ -74,6 +74,10 @@ impl Image {
         self
     }
 
+    pub fn preload(&self) {
+        image::preload(&self.path, self.thumbnail, self.blur);
+    }
+
     /*
      * starts decoding the file if nothing asked for it yet, and says whether
      * it is ready to draw; a file that can't be read never becomes ready

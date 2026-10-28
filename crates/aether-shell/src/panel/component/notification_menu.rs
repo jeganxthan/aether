@@ -1,41 +1,45 @@
 use std::collections::HashMap;
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Mutex, OnceLock, PoisonError};
 use std::time::Duration;
 
 use aether::{
-    Align, Animation, Canvas, Center, Color, Column, Cursor, Easing, Full, Horizontal, Key,
-    Keyboard, Layer, LayerWindow, Padding, Parent, Path, Radius, Rectangle, Row, ScrollArea, Shape,
-    Stack, Text, Vertical, Weight, Widget, Zone, children,
+    Align, Animation, Canvas, Center, Color, Column, Cursor, Easing, Full, Horizontal, InputArea,
+    Key, Keyboard, Layer, LayerWindow, Margin, Padding, Parent, Path, Radius, Rectangle, Row,
+    ScrollArea, Shape, Stack, Text, Vertical, Weight, Widget, Zone, children,
 };
 use aether_services::notifications::Notification;
 
 use crate::panel::notification::icon_path;
 use crate::panel::svg::recolor::ink_image;
-use crate::panel::top::PANEL_HEIGHT;
+use crate::panel::top::{NOTIFICATION_EDGE_RIGHT, PANEL_HEIGHT};
 use crate::services::notifications;
 use crate::theme::theme;
 
 const MENU_WIDTH: f32 = 360.0;
-const HINT_WIDTH: f32 = 194.0;
+const HINT_WIDTH: f32 = 176.0;
 const HINT_HEIGHT: f32 = 36.0;
-const MENU_PADDING: f32 = 14.0;
+const HINT_WINDOW_WIDTH: f32 = 210.0;
+const HINT_WINDOW_HEIGHT: f32 = 48.0;
+const MENU_PADDING: f32 = 20.0;
 const HEADER_HEIGHT: f32 = 34.0;
 const ROW_HEIGHT: f32 = 70.0;
 const ROW_GAP: f32 = 7.0;
 const CLEAR_HEIGHT: f32 = 32.0;
 const MAX_ROWS: usize = 5;
 const SWIPE_DISTANCE: f32 = 72.0;
-const RIGHT_INSET: f32 = 64.0;
 const EAR_RADIUS: f32 = 13.0;
+const MENU_ANIMATION_DURATION: Duration = super::popup_motion::EXPANSION_DURATION;
 
 static OPEN: AtomicBool = AtomicBool::new(false);
 static HOVERED: AtomicBool = AtomicBool::new(false);
+static HOVER_GENERATION: AtomicU64 = AtomicU64::new(0);
 static PROGRESS: OnceLock<Mutex<Animation<f32>>> = OnceLock::new();
+static HINT_PROGRESS: OnceLock<Mutex<Animation<f32>>> = OnceLock::new();
 static DRAG_ORIGINS: OnceLock<Mutex<HashMap<u32, f32>>> = OnceLock::new();
 
 fn premium_text(value: impl Into<String>) -> Text {
-    Text::new(value).font("Adwaita Sans")
+    Text::new(value).font("Maple Mono")
 }
 
 fn island_path(width: f32, height: f32, ear_radius: f32, bottom_radius: f32) -> Path {
@@ -160,9 +164,7 @@ pub fn hovered() -> bool {
 }
 
 pub fn set_hovered(hovered: bool) {
-    if HOVERED.swap(hovered, Ordering::Relaxed) != hovered {
-        aether::refresh();
-    }
+    super::popup_motion::set_hovered(hovered, &HOVERED, &HOVER_GENERATION);
 }
 
 pub fn toggle_open() {
@@ -176,30 +178,182 @@ pub fn close() {
     }
 }
 
-fn progress() -> f32 {
-    let animation = PROGRESS.get_or_init(|| {
+fn animation_value(animation: &'static OnceLock<Mutex<Animation<f32>>>, target: bool) -> f32 {
+    let animation = animation.get_or_init(|| {
         Mutex::new(
             Animation::new(0.0)
-                .duration(Duration::from_millis(260))
+                .duration(MENU_ANIMATION_DURATION)
                 .easing(Easing::Out),
         )
     });
     let mut animation = animation.lock().unwrap_or_else(PoisonError::into_inner);
-    animation.to(if open() { 1.0 } else { 0.0 });
+    animation.to(if target { 1.0 } else { 0.0 });
     animation.value()
+}
+
+fn menu_progress() -> f32 {
+    animation_value(&PROGRESS, open())
+}
+
+fn hint_progress(menu_progress: f32) -> f32 {
+    animation_value(&HINT_PROGRESS, hovered() || open() || menu_progress > 0.001)
+}
+
+fn hint_width(progress: f32) -> f32 {
+    (HINT_WIDTH * progress).round().max(2.0)
+}
+
+fn hint_height(progress: f32) -> f32 {
+    (HINT_HEIGHT * progress).round().max(2.0)
+}
+
+fn island_shadow_layer(width: f32, height: f32, radius: f32, opacity: f32) -> Rectangle {
+    let body_width = (width - 2.0 * radius).max(0.0);
+
+    Rectangle::new()
+        .width(width)
+        .height(height)
+        .fill(Color::TRANSPARENT)
+        .padding(Padding {
+            top: 0.0,
+            right: radius,
+            bottom: 0.0,
+            left: radius,
+        })
+        .align_child(Align::Center, Align::Start)
+        .child(
+            Rectangle::new()
+                .width(body_width)
+                .height(height)
+                .radius_bottom_left(radius)
+                .radius_bottom_right(radius)
+                .fill(Color::TRANSPARENT)
+                .shadow(crate::panel::component::island_shadow(opacity)),
+        )
+}
+
+pub fn notification_hint() -> LayerWindow {
+    let menu_progress = menu_progress();
+    let hint_progress = hint_progress(menu_progress);
+    let current_width = hint_width(hint_progress);
+    let current_height = hint_height(hint_progress);
+    let radius = (EAR_RADIUS * hint_progress).min(current_height * 0.44);
+    let icon = if notifications::do_not_disturb() {
+        notification_bell_off()
+    } else {
+        notification_bell()
+    };
+
+    let fill_shape = Box::new(
+        island_path(current_width, current_height, radius, radius)
+            .fill(theme().bar)
+            .opacity(hint_progress),
+    ) as Box<dyn Shape>;
+    let border_shape = Box::new(
+        island_border_path(current_width, current_height, radius, radius)
+            .stroke(1.0, theme().surface_border)
+            .opacity(hint_progress),
+    ) as Box<dyn Shape>;
+    let canvas = Canvas::new()
+        .width(current_width)
+        .height(current_height)
+        .shapes(vec![fill_shape, border_shape]);
+
+    let content = Row::new(children![
+        Rectangle::new()
+            .width(16.0)
+            .height(16.0)
+            .fill(ink_image(icon, theme().icon)),
+        premium_text("Notifications")
+            .color(theme().text)
+            .size(12.0)
+            .weight(Weight::Medium),
+    ])
+    .height(Parent)
+    .gap(9.0)
+    .align(Align::Center);
+
+    let card = Rectangle::new()
+        .width(current_width)
+        .height(current_height)
+        .fill(Color::TRANSPARENT)
+        .on_hover(set_hovered)
+        .on_click(|_| {
+            if !open() {
+                toggle_open();
+            }
+        })
+        .child(Stack::new(children![
+            island_shadow_layer(current_width, current_height, radius, 0.35 * hint_progress,),
+            canvas,
+            Rectangle::new()
+                .width(Parent)
+                .height(Parent)
+                .fill(Color::TRANSPARENT)
+                .padding(Padding {
+                    top: 0.0,
+                    right: 14.0,
+                    bottom: 0.0,
+                    left: 14.0,
+                })
+                .opacity(((hint_progress - 0.2) / 0.8).clamp(0.0, 1.0))
+                .align_child(Align::Center, Align::Center)
+                .child(content),
+        ]));
+
+    let window = LayerWindow::new()
+        .width(HINT_WINDOW_WIDTH)
+        .height(HINT_WINDOW_HEIGHT)
+        .anchor_vertical(Vertical::Top)
+        .anchor_horizontal(Horizontal::Right)
+        .layer(Layer::Top)
+        .space(Zone::Ignore)
+        .namespace("aether-notification-hint")
+        .margin(Margin {
+            top: PANEL_HEIGHT as i32,
+            right: NOTIFICATION_EDGE_RIGHT as i32,
+            bottom: 0,
+            left: 0,
+        });
+
+    if hint_progress > 0.05 {
+        window.input_region(vec![InputArea {
+            x: (HINT_WINDOW_WIDTH - current_width).round() as i32,
+            y: 0,
+            width: current_width.round() as i32,
+            height: current_height.round() as i32,
+        }])
+    } else {
+        window.click_through()
+    }
+    .child(
+        Rectangle::new()
+            .width(Parent)
+            .height(Parent)
+            .fill(Color::TRANSPARENT)
+            .align_child(Align::End, Align::Start)
+            .child(card),
+    )
 }
 
 pub fn notification_menu() -> LayerWindow {
     let notifications = notifications::active_notifications();
     let count = notifications.len();
-    let progress = progress();
-    let expanded = open() || progress > 0.01;
-    let hovered = HOVERED.load(Ordering::Relaxed);
-    let hint_visible = hovered && !expanded;
+    let progress = menu_progress();
+    let hint_progress = hint_progress(progress);
+    let hint_width = hint_width(hint_progress);
+    let hint_height = hint_height(hint_progress);
     let content_height = menu_content_height(count);
-    let current_width = HINT_WIDTH + (MENU_WIDTH - HINT_WIDTH) * progress;
-    let current_height = HINT_HEIGHT + (content_height - HINT_HEIGHT) * progress;
-    let content_opacity = ((progress - 0.2) / 0.8).clamp(0.0, 1.0);
+    let current_width = (hint_width + (MENU_WIDTH - hint_width) * progress)
+        .round()
+        .max(2.0);
+    let current_height = (hint_height + (content_height - hint_height) * progress)
+        .round()
+        .max(2.0);
+    let radius = (EAR_RADIUS * hint_progress
+        + (EAR_RADIUS - EAR_RADIUS * hint_progress) * progress)
+        .min(current_height * 0.44);
+    let content_opacity = ((progress - 0.25) / 0.75).clamp(0.0, 1.0);
 
     let window = LayerWindow::new()
         .width(Full)
@@ -216,32 +370,12 @@ pub fn notification_menu() -> LayerWindow {
             }
         });
 
-    if !expanded && !hint_visible {
+    if progress <= 0.001 && !open() {
         return window.click_through().child(blank());
     }
 
-    let header = if expanded {
-        menu_header(count)
-    } else {
-        hint_header(count)
-    };
-    let foreground = if expanded {
-        Rectangle::new()
-            .width(Parent)
-            .height(Parent)
-            .child(menu_content(notifications, count))
-    } else {
-        Rectangle::new()
-            .width(Parent)
-            .height(Parent)
-            .align_child(Align::Center, Align::Center)
-            .child(header)
-    };
-
-    let radius = (EAR_RADIUS * progress.max(if hint_visible { 1.0 } else { 0.0 }))
-        .min(current_height * 0.44);
     let fill_shape =
-        Box::new(island_path(current_width, current_height, radius, radius).fill(theme().surface))
+        Box::new(island_path(current_width, current_height, radius, radius).fill(theme().bar))
             as Box<dyn Shape>;
     let border_shape = Box::new(
         island_border_path(current_width, current_height, radius, radius)
@@ -251,46 +385,29 @@ pub fn notification_menu() -> LayerWindow {
         .width(current_width)
         .height(current_height)
         .shapes(vec![fill_shape, border_shape]);
-
     let card = Rectangle::new()
-        .width(if expanded { current_width } else { HINT_WIDTH })
-        .height(if expanded {
-            current_height
-        } else {
-            HINT_HEIGHT
-        })
-        .shadow(crate::panel::component::island_shadow(0.35))
-        .clip()
+        .width(current_width)
+        .height(current_height)
+        .fill(Color::TRANSPARENT)
         .on_hover(set_hovered)
-        .on_click(|_| {
-            if !open() {
-                toggle_open();
-            }
-        })
+        .on_click(|_| {})
         .child(Stack::new(children![
+            island_shadow_layer(current_width, current_height, radius, 0.35 * progress),
             canvas,
             Rectangle::new()
                 .width(Parent)
                 .height(Parent)
                 .fill(Color::TRANSPARENT)
-                .padding(if expanded {
-                    Padding {
-                        top: MENU_PADDING,
-                        right: MENU_PADDING,
-                        bottom: MENU_PADDING,
-                        left: MENU_PADDING,
-                    }
-                } else {
-                    Padding {
-                        top: 0.0,
-                        right: 14.0,
-                        bottom: 0.0,
-                        left: 14.0,
-                    }
+                .clip()
+                .padding(Padding {
+                    top: MENU_PADDING,
+                    right: MENU_PADDING,
+                    bottom: MENU_PADDING,
+                    left: MENU_PADDING,
                 })
-                .opacity(if expanded { content_opacity } else { 1.0 })
+                .opacity(content_opacity)
                 .align_child(Align::Center, Align::Center)
-                .child(foreground),
+                .child(menu_content(notifications, count)),
         ]));
 
     window.child(
@@ -301,7 +418,7 @@ pub fn notification_menu() -> LayerWindow {
             .on_click(|_| close())
             .padding(Padding {
                 top: PANEL_HEIGHT,
-                right: RIGHT_INSET,
+                right: NOTIFICATION_EDGE_RIGHT as f32,
                 bottom: 0.0,
                 left: 0.0,
             })
@@ -329,40 +446,22 @@ fn menu_content_height(count: usize) -> f32 {
 }
 
 fn menu_header(count: usize) -> Row {
+    let actions = Row::new(children![dnd_button(), count_chip(count)])
+        .height(Parent)
+        .gap(8.0)
+        .align(Align::Center);
+
     Row::new(children![
         premium_text("Notifications")
             .color(theme().text)
             .size(15.0)
             .weight(Weight::SemiBold),
-        Rectangle::new()
-            .width(Parent)
-            .height(1.0)
-            .fill(Color::TRANSPARENT),
-        dnd_button(),
-        count_chip(count),
+        actions,
     ])
     .width(Parent)
     .height(HEADER_HEIGHT)
     .align(Align::Center)
     .justify(aether::SpaceBetween)
-}
-
-fn hint_header(count: usize) -> Row {
-    Row::new(children![
-        Rectangle::new()
-            .width(16.0)
-            .height(16.0)
-            .fill(ink_image(notification_bell(), theme().icon)),
-        premium_text("Notifications")
-            .color(theme().text)
-            .size(12.0)
-            .weight(Weight::Medium),
-        count_chip(count),
-    ])
-    .width(Parent)
-    .height(Parent)
-    .gap(8.0)
-    .align(Align::Center)
 }
 
 fn count_chip(count: usize) -> Rectangle {
@@ -523,7 +622,8 @@ fn notification_row(notification: Notification) -> Rectangle {
         .height(ROW_HEIGHT)
         .radius(12.0)
         .fill(theme().chip)
-        .padding(8.0)
+        .border(1.0, theme().chip_border)
+        .padding(10.0)
         .cursor(Cursor::Grab)
         .on_click(move |_| clear_drag(id))
         .on_drag(move |point| swipe_notification(id, point.x))
@@ -561,6 +661,11 @@ fn notification_bell() -> std::path::PathBuf {
         .join("../../assets/icons/notification/bell.svg")
 }
 
+fn notification_bell_off() -> std::path::PathBuf {
+    std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("../../assets/icons/notification/bell-off.svg")
+}
+
 fn ago(created_at: u64) -> String {
     let now = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
@@ -586,4 +691,16 @@ fn strip_markup(text: &str) -> String {
         }
     }
     plain
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn hover_hint_animates_from_hidden_to_its_target_size() {
+        assert_eq!(hint_width(0.0), 2.0);
+        assert_eq!(hint_width(1.0), HINT_WIDTH);
+        assert_eq!(hint_height(1.0), HINT_HEIGHT);
+    }
 }

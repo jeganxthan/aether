@@ -22,35 +22,60 @@ pub fn soften(mut image: Bitmap, radius: u32) -> Bitmap {
 
 // one box blur along x when step_x is 1, or along y when step_y is 1
 fn pass(image: &Bitmap, radius: u32, step_x: u32, step_y: u32) -> Vec<u8> {
-    let width = image.width as i64;
-    let height = image.height as i64;
-    let radius = radius as i64;
+    let width = image.width as usize;
+    let height = image.height as usize;
+    let radius = radius as usize;
+    let count = (radius * 2 + 1) as u64;
 
     let mut blurred = vec![0; image.pixels.len()];
 
-    for y in 0..height {
-        for x in 0..width {
-            let mut total = [0u32; 4];
-            let mut count = 0;
+    let horizontal = step_x == 1 && step_y == 0;
+    let (line_count, line_length) = if horizontal {
+        (height, width)
+    } else {
+        (width, height)
+    };
 
-            for offset in -radius..=radius {
-                // past the edge, the edge pixel repeats
-                let sample_x = (x + offset * step_x as i64).clamp(0, width - 1);
-                let sample_y = (y + offset * step_y as i64).clamp(0, height - 1);
+    for line in 0..line_count {
+        let index_at = |position: usize| {
+            let (x, y) = if horizontal {
+                (position, line)
+            } else {
+                (line, position)
+            };
+            (y * width + x) * 4
+        };
+        let mut total = [0u64; 4];
 
-                let index = ((sample_y * width + sample_x) * 4) as usize;
-
-                for channel in 0..4 {
-                    total[channel] += u32::from(image.pixels[index + channel]);
-                }
-
-                count += 1;
+        for offset in 0..=radius * 2 {
+            let position = offset as i64 - radius as i64;
+            let sample = position.clamp(0, line_length as i64 - 1) as usize;
+            let index = index_at(sample);
+            for channel in 0..4 {
+                total[channel] += u64::from(image.pixels[index + channel]);
             }
+        }
 
-            let index = ((y * width + x) * 4) as usize;
-
+        for position in 0..line_length {
+            let index = index_at(position);
             for channel in 0..4 {
                 blurred[index + channel] = (total[channel] / count) as u8;
+            }
+
+            if position + 1 == line_length {
+                continue;
+            }
+
+            let leaving =
+                (position as i64 - radius as i64).clamp(0, line_length as i64 - 1) as usize;
+            let entering =
+                (position as i64 + radius as i64 + 1).clamp(0, line_length as i64 - 1) as usize;
+            let leaving_index = index_at(leaving);
+            let entering_index = index_at(entering);
+
+            for channel in 0..4 {
+                total[channel] -= u64::from(image.pixels[leaving_index + channel]);
+                total[channel] += u64::from(image.pixels[entering_index + channel]);
             }
         }
     }
@@ -98,5 +123,46 @@ mod tests {
             red.windows(2).all(|pair| pair[0] <= pair[1]),
             "should only rise: {red:?}"
         );
+    }
+
+    #[test]
+    fn sliding_window_matches_repeated_edge_samples() {
+        let pixels: Vec<u8> = (0..5 * 3 * 4).map(|value| (value * 17) as u8).collect();
+        let image = Bitmap {
+            width: 5,
+            height: 3,
+            pixels: Arc::new(pixels),
+        };
+
+        for (step_x, step_y) in [(1, 0), (0, 1)] {
+            assert_eq!(
+                pass(&image, 2, step_x, step_y),
+                naive_pass(&image, 2, step_x, step_y)
+            );
+        }
+    }
+
+    fn naive_pass(image: &Bitmap, radius: u32, step_x: u32, step_y: u32) -> Vec<u8> {
+        let mut output = vec![0; image.pixels.len()];
+        for y in 0..image.height as i64 {
+            for x in 0..image.width as i64 {
+                let mut total = [0u64; 4];
+                let mut count = 0;
+                for offset in -(radius as i64)..=radius as i64 {
+                    let sample_x = (x + offset * step_x as i64).clamp(0, image.width as i64 - 1);
+                    let sample_y = (y + offset * step_y as i64).clamp(0, image.height as i64 - 1);
+                    let index = ((sample_y * image.width as i64 + sample_x) * 4) as usize;
+                    for channel in 0..4 {
+                        total[channel] += u64::from(image.pixels[index + channel]);
+                    }
+                    count += 1;
+                }
+                let index = ((y * image.width as i64 + x) * 4) as usize;
+                for channel in 0..4 {
+                    output[index + channel] = (total[channel] / count) as u8;
+                }
+            }
+        }
+        output
     }
 }

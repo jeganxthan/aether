@@ -13,16 +13,17 @@ use panel::component::battery_menu::battery_menu;
 use panel::component::battery_popup::battery_hint;
 use panel::component::bluetooth_menu::bluetooth_menu;
 use panel::component::bluetooth_popup::bluetooth_hint;
-use panel::component::notification_menu::notification_menu;
+use panel::component::notification_menu::{notification_hint, notification_menu};
 
 use panel::component::launcher::launcher;
 use panel::component::player_popup::{player_menu, player_popup};
 use panel::component::polkit_auth;
 use panel::component::settings_popup::settings_hint;
 use panel::component::wifi_popup::{wifi_hint, wifi_menu};
-use panel::lockscreen::view as lockscreen;
+use panel::lockscreen::{self, view as lockscreen};
 
 fn main() {
+    lockscreen::preload();
     services::notifications::ensure_started();
     // Warm up launcher applications and icon cache in the background on startup
     panel::component::launcher::preload();
@@ -32,8 +33,9 @@ fn main() {
     // Inside your existing async startup function:
     App::new()
         // panel mode: the top bar plus the notification popups in the top right corner
-        .window(panel)
+        .window_per_monitor(panel)
         .window(notifications)
+        .window(notification_hint)
         .window(notification_menu)
         // the network name shown under the wifi icon, and the menu a click opens
         .window(wifi_hint)

@@ -25,7 +25,7 @@ const CARD_RADIUS: f32 = 16.0;
 const CARD_PADDING: f32 = 13.0;
 
 // the distance kept from the screen edges (positioned right under the top panel)
-const EDGE_INSET_RIGHT: f32 = 14.0;
+const EDGE_INSET_RIGHT: f32 = 0.0;
 const EDGE_INSET_TOP: f32 = 36.0;
 
 // a surface cannot be zero high, so an empty stack still asks for a sliver
@@ -80,10 +80,7 @@ pub fn notifications() -> LayerWindow {
     let regions = popups
         .iter()
         .enumerate()
-        .filter_map(|(index, popup)| {
-            let visual = ease_slide(popup.offset, popup.leaving);
-            card_region(index, visual)
-        })
+        .filter_map(|(index, popup)| card_region(index, popup.offset))
         .collect();
 
     window.input_region(regions).child(stack(popups))
@@ -143,7 +140,7 @@ fn stack(popups: Vec<VisiblePopup>) -> Column {
  * send it away. The card brightens while the pointer is over it.
  */
 fn card(popup: &VisiblePopup) -> Rectangle {
-    let visual = ease_slide(popup.offset, popup.leaving);
+    let visual = popup.offset.clamp(0.0, 1.0);
     let opacity = card_opacity(visual, popup.leaving);
     let scale = card_scale(visual);
     let slide_x = visual * CARD_WIDTH;
@@ -498,18 +495,6 @@ fn unescape(text: &str) -> String {
     result
 }
 
-/// Eased visual offset from raw linear offset (1.0 = offscreen right, 0.0 = at rest).
-/// - Entering: Cubic Ease-Out (rapid entrance, buttery-smooth deceleration to rest).
-/// - Leaving: Ease-In (gentle departure, accelerating off-screen).
-pub fn ease_slide(offset: f32, leaving: bool) -> f32 {
-    let offset = offset.clamp(0.0, 1.0);
-    if leaving {
-        offset * offset
-    } else {
-        offset * offset * offset
-    }
-}
-
 /// Dynamic opacity based on visual offset:
 /// - Entering: Fades in rapidly as it slides onto screen.
 /// - Leaving: Softly fades out to 0 as it leaves.
@@ -569,22 +554,6 @@ mod tests {
         let second = card_region(1, 0.0).unwrap();
 
         assert_eq!(second.y, first.y + (CARD_HEIGHT + CARD_GAP) as i32);
-    }
-
-    #[test]
-    fn ease_slide_entering_decelerates_smoothly() {
-        assert_eq!(ease_slide(1.0, false), 1.0);
-        assert_eq!(ease_slide(0.0, false), 0.0);
-        // at 20% remaining distance, cubic out has traveled over 99% of the way
-        assert!(ease_slide(0.2, false) < 0.01);
-    }
-
-    #[test]
-    fn ease_slide_leaving_accelerates_away() {
-        assert_eq!(ease_slide(0.0, true), 0.0);
-        assert_eq!(ease_slide(1.0, true), 1.0);
-        // gentle departure at the start
-        assert!((ease_slide(0.2, true) - 0.04).abs() < 1e-5);
     }
 
     #[test]
