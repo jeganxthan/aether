@@ -10,7 +10,7 @@ use aether::{
 
 use crate::panel::svg::player_svg::{control_icon, player_brand_icon};
 use crate::panel::top::PANEL_HEIGHT;
-use crate::services::player::{next, play_pause, player, previous, seek_to};
+use crate::services::{display, player::{next, play_pause, player, previous, seek_to}};
 use crate::theme::theme;
 
 const ISLAND_WINDOW_WIDTH: f32 = 260.0;
@@ -34,6 +34,31 @@ static HOVER_START: OnceLock<Mutex<Option<Instant>>> = OnceLock::new();
 static MENU_OPEN: AtomicBool = AtomicBool::new(false);
 static MENU_PROGRESS: OnceLock<Mutex<Animation<f32>>> = OnceLock::new();
 const MENU_ANIM_DURATION: Duration = Duration::from_millis(280);
+static TARGET_MONITOR: OnceLock<Mutex<Option<String>>> = OnceLock::new();
+
+fn target_monitor() -> &'static Mutex<Option<String>> {
+    TARGET_MONITOR.get_or_init(|| Mutex::new(None))
+}
+
+fn is_target_monitor(monitor: &aether::Monitor) -> bool {
+    let target = target_monitor()
+        .lock()
+        .ok()
+        .and_then(|target| target.clone());
+
+    target.as_deref().map_or_else(
+        || {
+            display::is_primary(
+                &monitor.name,
+                monitor.x,
+                monitor.y,
+                &monitor.outputs,
+                monitor.origin_output.as_deref(),
+            )
+        },
+        |target| target == monitor.name,
+    )
+}
 
 fn menu_progress() -> f32 {
     let animation = MENU_PROGRESS.get_or_init(|| {
@@ -73,7 +98,67 @@ pub fn close_menu() {
     }
 }
 
-pub fn player_menu() -> LayerWindow {
+pub fn open_player_on_hover_for_monitor(monitor: String) {
+    open_for_monitor(true, Some(monitor));
+}
+
+pub fn toggle_player_for_monitor(monitor: String) {
+    let same_monitor = target_monitor()
+        .lock()
+        .map(|target| target.as_deref() == Some(monitor.as_str()))
+        .unwrap_or(false);
+
+    if hovered() && same_monitor {
+        close();
+    } else {
+        open_for_monitor(false, Some(monitor));
+    }
+}
+
+pub fn set_target_monitor(monitor: Option<String>) {
+    if let Ok(mut target) = target_monitor().lock() {
+        *target = monitor;
+    }
+}
+
+fn open_for_monitor(_close_on_unhover: bool, monitor: Option<String>) {
+    HOVER_GENERATION.fetch_add(1, Ordering::Relaxed);
+    HOVERED.store(true, Ordering::Relaxed);
+    if let Ok(mut target) = target_monitor().lock() {
+        *target = monitor;
+    }
+    aether::refresh();
+}
+
+fn close() {
+    HOVER_GENERATION.fetch_add(1, Ordering::Relaxed);
+    HOVERED.store(false, Ordering::Relaxed);
+    if let Ok(mut target) = target_monitor().lock() {
+        *target = None;
+    }
+    aether::refresh();
+}
+
+pub fn player_menu(monitor: &aether::Monitor) -> LayerWindow {
+    if !is_target_monitor(monitor) {
+        return LayerWindow::new()
+            .width(aether::Full)
+            .height(aether::Full)
+            .anchor_vertical(Vertical::Top)
+            .anchor_horizontal(Horizontal::Right)
+            .layer(Layer::Overlay)
+            .space(aether::Zone::Ignore)
+            .namespace("aether-player-menu")
+            .keyboard(Keyboard::OnDemand)
+            .on_key(|key| {
+                if key == Key::Escape {
+                    close_menu();
+                }
+            })
+            .click_through()
+            .child(blank());
+    }
+
     const MENU_WIDTH: f32 = 340.0;
     const MENU_HEIGHT: f32 = 140.0;
     let progress = menu_progress();
@@ -289,6 +374,7 @@ pub fn player_menu() -> LayerWindow {
                 )
         ]));
 
+    let monitor_name = monitor.name.clone();
     window.child(
         Rectangle::new()
             .width(Parent)
@@ -307,7 +393,10 @@ pub fn player_menu() -> LayerWindow {
                         left: 0.0,
                     })
                     .align_child(Align::End, Align::Start)
-                    .child(card.on_click(|_| {})),
+                    .child(card.on_click(move |_| {
+                        super::player_popup::set_target_monitor(Some(monitor_name.clone()));
+                        toggle_menu();
+                    })),
             ),
     )
 }
@@ -462,7 +551,27 @@ fn build_island_border_path(w: f32, h: f32, r_e: f32, r_b: f32) -> Path {
         .cubic_to(w - r_e, r_e - k_e, w - k_e, 0.0, w, 0.0)
 }
 
-pub fn player_popup() -> LayerWindow {
+pub fn player_popup(monitor: &aether::Monitor) -> LayerWindow {
+    if !is_target_monitor(monitor) {
+        return LayerWindow::new()
+            .width(ISLAND_WINDOW_WIDTH)
+            .height(ISLAND_WINDOW_HEIGHT)
+            .anchor_vertical(Vertical::Top)
+            .anchor_horizontal(Horizontal::Right)
+            .layer(Layer::Top)
+            .space(aether::Zone::Ignore)
+            .namespace("aether-player-popup")
+            .visible(is_target_monitor(monitor))
+            .margin(Margin {
+                top: PANEL_HEIGHT as i32,
+                right: PLAYER_EDGE_INSET_RIGHT as i32,
+                bottom: 0,
+                left: 0,
+            })
+            .click_through()
+            .child(blank());
+    }
+
     let active_player = player();
     let has_player = active_player.is_some();
     let is_hovered = (hovered() || MENU_OPEN.load(Ordering::Relaxed)) && has_player;
@@ -477,6 +586,7 @@ pub fn player_popup() -> LayerWindow {
             .layer(Layer::Top)
             .space(aether::Zone::Ignore)
             .namespace("aether-player-popup")
+            .visible(is_target_monitor(monitor))
             .margin(Margin {
                 top: PANEL_HEIGHT as i32,
                 right: PLAYER_EDGE_INSET_RIGHT as i32,
@@ -496,6 +606,7 @@ pub fn player_popup() -> LayerWindow {
             .layer(Layer::Top)
             .space(aether::Zone::Ignore)
             .namespace("aether-player-popup")
+            .visible(is_target_monitor(monitor))
             .click_through()
             .child(blank());
     };

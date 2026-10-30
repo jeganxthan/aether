@@ -4,6 +4,8 @@ use serde::{Deserialize, Serialize};
 pub struct ClipboardEntry {
     pub id: String,
     pub text: String,
+    #[serde(default)]
+    pub image_path: Option<String>,
     pub copied_at: i64,
     pub pinned: bool,
 }

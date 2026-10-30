@@ -9,6 +9,7 @@ use aether::{
 };
 
 use crate::panel::top::PANEL_HEIGHT;
+use crate::services::display;
 use crate::theme::theme;
 
 const ISLAND_MAX_HEIGHT: f32 = 36.0;
@@ -30,6 +31,31 @@ const ISLAND_ANIM_DURATION: Duration = super::popup_motion::EXPANSION_DURATION;
 static PROGRESS: OnceLock<Mutex<Animation<f32>>> = OnceLock::new();
 static HOVERED: AtomicBool = AtomicBool::new(false);
 static HOVER_GENERATION: AtomicU64 = AtomicU64::new(0);
+static TARGET_MONITOR: OnceLock<Mutex<Option<String>>> = OnceLock::new();
+
+fn target_monitor() -> &'static Mutex<Option<String>> {
+    TARGET_MONITOR.get_or_init(|| Mutex::new(None))
+}
+
+fn is_target_monitor(monitor: &aether::Monitor) -> bool {
+    let target = target_monitor()
+        .lock()
+        .ok()
+        .and_then(|target| target.clone());
+
+    target.as_deref().map_or_else(
+        || {
+            display::is_primary(
+                &monitor.name,
+                monitor.x,
+                monitor.y,
+                &monitor.outputs,
+                monitor.origin_output.as_deref(),
+            )
+        },
+        |target| target == monitor.name,
+    )
+}
 
 fn premium_text(value: impl Into<String>) -> Text {
     Text::new(value).font("Maple Mono")
@@ -48,6 +74,41 @@ pub fn dismiss() {
     if HOVERED.swap(false, Ordering::Relaxed) {
         aether::refresh();
     }
+}
+
+pub fn open_bluetooth_on_hover_for_monitor(monitor: String) {
+    open_for_monitor(true, Some(monitor));
+}
+
+pub fn toggle_bluetooth_for_monitor(monitor: String) {
+    let same_monitor = target_monitor()
+        .lock()
+        .map(|target| target.as_deref() == Some(monitor.as_str()))
+        .unwrap_or(false);
+
+    if hovered() && same_monitor {
+        close();
+    } else {
+        open_for_monitor(false, Some(monitor));
+    }
+}
+
+fn open_for_monitor(_close_on_unhover: bool, monitor: Option<String>) {
+    HOVER_GENERATION.fetch_add(1, Ordering::Relaxed);
+    HOVERED.store(true, Ordering::Relaxed);
+    if let Ok(mut target) = target_monitor().lock() {
+        *target = monitor;
+    }
+    aether::refresh();
+}
+
+fn close() {
+    HOVER_GENERATION.fetch_add(1, Ordering::Relaxed);
+    HOVERED.store(false, Ordering::Relaxed);
+    if let Ok(mut target) = target_monitor().lock() {
+        *target = None;
+    }
+    aether::refresh();
 }
 
 pub(super) fn island_progress(expanded: bool) -> f32 {
@@ -118,7 +179,26 @@ fn build_island_border_path(w: f32, h: f32, r_e: f32, r_b: f32) -> Path {
         .cubic_to(w - r_e, r_e - k_e, w - k_e, 0.0, w, 0.0)
 }
 
-pub fn bluetooth_hint() -> LayerWindow {
+pub fn bluetooth_hint(monitor: &aether::Monitor) -> LayerWindow {
+    if !is_target_monitor(monitor) {
+        return LayerWindow::new()
+            .width(ISLAND_WINDOW_WIDTH)
+            .height(ISLAND_WINDOW_HEIGHT)
+            .anchor_vertical(Vertical::Top)
+            .anchor_horizontal(Horizontal::Right)
+            .layer(Layer::Top)
+            .space(Zone::Ignore)
+            .namespace("aether-bluetooth")
+            .margin(Margin {
+                top: PANEL_HEIGHT as i32,
+                right: ISLAND_EDGE_INSET_RIGHT as i32,
+                bottom: 0,
+                left: 0,
+            })
+            .click_through()
+            .child(blank());
+    }
+
     let menu_progress = super::bluetooth_menu::menu_progress();
     let expanded = hovered() || super::bluetooth_menu::open() || menu_progress > 0.001;
     let progress = island_progress(expanded);
@@ -269,14 +349,16 @@ pub fn bluetooth_hint() -> LayerWindow {
             ),
     ]);
 
+    let monitor_name = monitor.name.clone();
     let island_card = Rectangle::new()
         .width(current_total_w)
         .height(current_h)
         .fill(Color::TRANSPARENT)
         .cursor(Cursor::Pointer)
         .on_hover(set_hovered)
-        .on_click(|_| {
+        .on_click(move |_| {
             dismiss();
+            super::bluetooth_menu::set_target_monitor(Some(monitor_name.clone()));
             super::bluetooth_menu::set_open(true);
         })
         .child(island_stack);
@@ -301,6 +383,7 @@ pub fn bluetooth_hint() -> LayerWindow {
         .layer(Layer::Top)
         .space(Zone::Ignore)
         .namespace("aether-bluetooth")
+        .visible(is_target_monitor(monitor))
         .margin(Margin {
             top: PANEL_HEIGHT as i32,
             right: ISLAND_EDGE_INSET_RIGHT as i32,

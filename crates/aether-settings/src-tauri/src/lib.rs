@@ -1,5 +1,8 @@
 mod commands;
-use commands::display::{display_apply, display_list, display_primary_get, display_primary_set};
+use commands::display::{
+    display_apply, display_layout_get, display_layout_set, display_list, display_primary_get,
+    display_primary_set,
+};
 use commands::wallpaper::{
     WallpaperState, wallpaper_current, wallpaper_folder, wallpaper_list, wallpaper_restore,
     wallpaper_set,
@@ -415,11 +418,21 @@ pub fn run() {
             display_apply,
             display_primary_get,
             display_primary_set,
+            display_layout_get,
+            display_layout_set,
             commands::sound::sound_get_state,
             commands::sound::sound_set_volume,
             commands::sound::sound_toggle_mute,
             commands::sound::sound_increase_volume,
             commands::sound::sound_decrease_volume,
+            commands::sound::sound_list_devices,
+            commands::sound::sound_select_output,
+            commands::sound::sound_select_input,
+            commands::sound::sound_get_microphone_state,
+            commands::sound::sound_toggle_microphone_mute,
+            commands::sound::sound_set_microphone_mute,
+            commands::power::power_get_snapshot,
+            commands::power::power_set_profile,
         ])
         .setup(|app| {
             #[cfg(target_os = "linux")]

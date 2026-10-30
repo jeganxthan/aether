@@ -41,4 +41,13 @@ if [ "$SESSION_DIR" = /usr/share/wayland-sessions ] &&
 fi
 
 printf 'Installed the Aether session: %s\n' "$desktop_target"
+labwc_config_dir="$HOME/.config/labwc"
+labwc_config="$labwc_config_dir/rc.xml"
+if [ ! -e "$labwc_config" ]; then
+	mkdir -p "$labwc_config_dir"
+	install -m 0644 "$SCRIPT_DIR/config/rc.xml" "$labwc_config"
+	printf 'Installed default Aether clipboard shortcuts in %s\n' "$labwc_config"
+else
+	printf 'Preserved existing labwc config: %s\n' "$labwc_config"
+fi
 printf 'Select Aether from the SDDM Session menu at your next login.\n'

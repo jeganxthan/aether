@@ -7,4 +7,5 @@ pub mod notifications;
 pub mod osd;
 pub mod player;
 pub mod runtime;
+pub mod sounds;
 pub mod wifi;

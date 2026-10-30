@@ -52,6 +52,8 @@ export default function Display() {
   >({});
   const [primaryName, setPrimaryName] = useState("");
   const [savedPrimaryName, setSavedPrimaryName] = useState("");
+  const [layoutMode, setLayoutMode] = useState<"extend" | "mirror" | "external">("extend");
+  const [savedLayoutMode, setSavedLayoutMode] = useState<"extend" | "mirror" | "external">("extend");
   const selectedNameRef = useRef("");
   const selected = displays.find((display) => display.name === selectedName);
 
@@ -60,11 +62,14 @@ export default function Display() {
     setError(null);
 
     try {
-      const [items, savedPrimary] = await Promise.all([
+      const [items, savedPrimary, savedLayout] = await Promise.all([
         displayService.list(),
         displayService.primary(),
+        displayService.layout(),
       ]);
       setDisplays(items);
+      setLayoutMode(savedLayout);
+      setSavedLayoutMode(savedLayout);
 
       const active = items.filter((item) => item.enabled);
       const primary =
@@ -213,7 +218,9 @@ export default function Display() {
       }
 
       await displayService.setPrimary(primaryName);
+      await displayService.setLayout(layoutMode);
       setSavedPrimaryName(primaryName);
+      setSavedLayoutMode(layoutMode);
       setMessage("Monitor arrangement applied.");
       await loadDisplays();
     } catch (err) {
@@ -227,6 +234,7 @@ export default function Display() {
     !!draft &&
     !!selected &&
     (primaryName !== savedPrimaryName ||
+    layoutMode !== savedLayoutMode ||
       displays.some((display) => {
         if (!display.enabled) return false;
         const position = layoutPositions[display.name] ?? {
@@ -335,6 +343,38 @@ export default function Display() {
             ))}
           </div>
         )}
+      </section>
+
+      <section className="space-y-4">
+        <div>
+          <h2 className="text-base font-medium">Display arrangement</h2>
+          <p className="mt-1 text-sm text-neutral-500">
+            Choose how connected displays work together. Changes are saved for
+            the next settings session.
+          </p>
+        </div>
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+          {([
+            ["extend", "Extend", "Use one large desktop across displays."],
+            ["mirror", "Mirror", "Show the same desktop on each display."],
+            ["external", "External only", "Use external displays and disable the built-in panel."],
+          ] as const).map(([value, label, detail]) => (
+            <button
+              key={value}
+              type="button"
+              onClick={() => setLayoutMode(value)}
+              className={[
+                "rounded-2xl border p-4 text-left transition",
+                layoutMode === value
+                  ? "border-[var(--accent)] bg-white/[0.055]"
+                  : "border-white/[0.08] bg-white/[0.02] hover:bg-white/[0.045]",
+              ].join(" ")}
+            >
+              <p className="text-sm font-medium">{label}</p>
+              <p className="mt-2 text-xs leading-relaxed text-neutral-500">{detail}</p>
+            </button>
+          ))}
+        </div>
       </section>
 
       {selected && draft && (

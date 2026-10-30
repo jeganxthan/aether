@@ -5,7 +5,7 @@ use aether::{
 
 use crate::panel::svg::osd_svg::OsdIcon;
 use crate::services::osd::{Kind, Shown, shown};
-use crate::theme::theme;
+use crate::theme::{Theme, theme};
 
 /*
  * The on screen display is a single slim card that rises from the bottom of the
@@ -26,6 +26,7 @@ const EDGE_INSET_BOTTOM: f32 = 72.0;
 
 // the icon box, and the gaps around and after it
 const ICON_SIZE: f32 = 22.0;
+const MIC_CIRCLE_SIZE: f32 = 54.0;
 const ICON_GAP: f32 = 12.0;
 
 // the room kept for the percentage, so the bar never moves as the number changes
@@ -92,9 +93,45 @@ fn card(reading: Shown) -> Rectangle {
     let drop = visual * (CARD_HEIGHT + 12.0);
     let opacity = 1.0 - visual;
 
+    match reading.kind {
+        Kind::Microphone => Rectangle::new()
+            .width(Parent)
+            .height(Parent)
+            .fill(Color::TRANSPARENT)
+            .align_child(Center, Center)
+            .child(
+                Rectangle::new()
+                    .width(MIC_CIRCLE_SIZE)
+                    .height(MIC_CIRCLE_SIZE)
+                    .fill(theme.surface)
+                    .border(1.0, theme.surface_border)
+                    .radius(MIC_CIRCLE_SIZE / 2.0)
+                    .shadow(
+                        Shadow::drop(theme.shadow)
+                            .opacity(0.45)
+                            .blur(20.0)
+                            .offset(0.0, 8.0),
+                    )
+                    .opacity(opacity)
+                    .translate(0.0, drop)
+                    .align_child(Center, Center)
+                    .child(
+                        Rectangle::new()
+                            .width(ICON_SIZE + 4.0)
+                            .height(ICON_SIZE + 4.0)
+                            .fill(OsdIcon::microphone(reading.muted).image()),
+                    ),
+            ),
+        _ => level_card(reading, opacity, drop, theme),
+    }
+}
+
+fn level_card(reading: Shown, opacity: f32, drop: f32, theme: Theme) -> Rectangle {
     let icon = match reading.kind {
         Kind::Volume => OsdIcon::volume(reading.percent, reading.muted),
         Kind::Brightness => OsdIcon::brightness(reading.percent),
+        Kind::KeyboardBrightness => OsdIcon::Keyboard,
+        Kind::Microphone => OsdIcon::microphone(reading.muted),
     };
 
     // the number always shows, muted or not, so the line keeps one shape

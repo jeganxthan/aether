@@ -13,10 +13,13 @@ pub enum OsdIcon {
     VolumeHalf,
     VolumeFull,
     Muted,
+    Microphone,
+    MicrophoneMuted,
 
     // brightness
     BrightnessLow,
     BrightnessHigh,
+    Keyboard,
 }
 
 impl OsdIcon {
@@ -41,21 +44,38 @@ impl OsdIcon {
         }
     }
 
+    pub fn microphone(muted: bool) -> Self {
+        if muted {
+            Self::MicrophoneMuted
+        } else {
+            Self::Microphone
+        }
+    }
+
     fn asset_name(self) -> &'static str {
         match self {
             Self::VolumeLow => "volume_low.svg",
             Self::VolumeHalf => "volume_half.svg",
             Self::VolumeFull => "volume_full.svg",
             Self::Muted => "mute.svg",
+            Self::Microphone => "microphone-sensitivity-high-symbolic.svg",
+            Self::MicrophoneMuted => "microphone-sensitivity-muted-symbolic.svg",
             Self::BrightnessLow => "sun-dim.svg",
             Self::BrightnessHigh => "sun.svg",
+            Self::Keyboard => "keyboard.svg",
         }
     }
 
     fn asset_path(self) -> PathBuf {
         // the icons live in the workspace root, two levels above the panel crate
+        let directory = match self {
+            Self::Microphone | Self::MicrophoneMuted => "mic",
+            _ => "osd",
+        };
+
         PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-            .join("../../assets/icons/osd")
+            .join("../../assets/icons")
+            .join(directory)
             .join(self.asset_name())
     }
 
@@ -76,8 +96,11 @@ mod tests {
             OsdIcon::VolumeHalf,
             OsdIcon::VolumeFull,
             OsdIcon::Muted,
+            OsdIcon::Microphone,
+            OsdIcon::MicrophoneMuted,
             OsdIcon::BrightnessLow,
             OsdIcon::BrightnessHigh,
+            OsdIcon::Keyboard,
         ] {
             let path = icon.asset_path();
 
@@ -100,5 +123,11 @@ mod tests {
         assert_eq!(OsdIcon::brightness(49), OsdIcon::BrightnessLow);
         assert_eq!(OsdIcon::brightness(50), OsdIcon::BrightnessHigh);
         assert_eq!(OsdIcon::brightness(100), OsdIcon::BrightnessHigh);
+    }
+
+    #[test]
+    fn microphone_icons_follow_the_mute_state() {
+        assert_eq!(OsdIcon::microphone(false), OsdIcon::Microphone);
+        assert_eq!(OsdIcon::microphone(true), OsdIcon::MicrophoneMuted);
     }
 }

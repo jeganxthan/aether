@@ -1,3 +1,4 @@
+use serde::Serialize;
 use std::{
     fs,
     io::Write,
@@ -5,10 +6,15 @@ use std::{
     process::{Command, Stdio},
 };
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 pub enum PowerProfile {
+    #[serde(rename = "power-saver")]
     Saver,
+
+    #[serde(rename = "balanced")]
     Balanced,
+
+    #[serde(rename = "performance")]
     Performance,
 }
 
@@ -54,7 +60,34 @@ pub enum PowerProfileError {
     CommandFailed(String),
     VerificationFailed { requested: String, actual: String },
 }
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PowerProfileStatus {
+    pub active: Option<PowerProfile>,
+    pub available: Vec<PowerProfile>,
+    pub supported: bool,
+    pub backend: ProfileBackend,
+    pub detail: Option<String>,
+}
 
+#[derive(Debug, Clone, Copy, Serialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum ProfileBackend {
+    PowerProfilesDaemon,
+    CpuFreq,
+    FirmwarePlatformProfile,
+    Unavailable,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CpuPolicyStatus {
+    pub policy: String,
+    pub governors: Vec<String>,
+    pub current_governor: Option<String>,
+    pub epp_preferences: Vec<String>,
+    pub current_epp: Option<String>,
+}
 impl std::fmt::Display for PowerProfileError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
@@ -284,7 +317,64 @@ impl PowerProfileService {
             active: actual,
         })
     }
+    pub fn profile_status(&self) -> PowerProfileStatus {
+        let active = self.active_profile().ok();
+        let available = self.available_profiles().unwrap_or_default();
 
+        let backend = if Self::run(&["get"]).is_ok() {
+            ProfileBackend::PowerProfilesDaemon
+        } else if PlatformProfile::read().is_ok() {
+            ProfileBackend::FirmwarePlatformProfile
+        } else if Self::sysfs_policies().is_ok() {
+            ProfileBackend::CpuFreq
+        } else {
+            ProfileBackend::Unavailable
+        };
+
+        let supported = !available.is_empty() && active.is_some();
+
+        PowerProfileStatus {
+            active,
+            available,
+            supported,
+            backend,
+            detail: if active.is_none() {
+                Some("Could not determine the active power profile".into())
+            } else {
+                None
+            },
+        }
+    }
+    pub fn cpu_policy_status(&self) -> Result<Vec<CpuPolicyStatus>, PowerProfileError> {
+        let policies = Self::sysfs_policies()?;
+
+        Ok(policies
+            .into_iter()
+            .map(|policy| {
+                let current_governor = fs::read_to_string(policy.path.join("scaling_governor"))
+                    .ok()
+                    .map(|value| value.trim().to_owned());
+
+                let current_epp =
+                    fs::read_to_string(policy.path.join("energy_performance_preference"))
+                        .ok()
+                        .map(|value| value.trim().to_owned());
+
+                CpuPolicyStatus {
+                    policy: policy
+                        .path
+                        .file_name()
+                        .unwrap_or_default()
+                        .to_string_lossy()
+                        .into_owned(),
+                    governors: policy.governors,
+                    current_governor,
+                    epp_preferences: policy.epp_preferences,
+                    current_epp,
+                }
+            })
+            .collect())
+    }
     fn sysfs_policies() -> Result<Vec<CpuFreqPolicy>, PowerProfileError> {
         let root = Path::new("/sys/devices/system/cpu/cpufreq");
         let entries = fs::read_dir(root)

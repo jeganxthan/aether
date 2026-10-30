@@ -11,7 +11,7 @@ use std::time::Duration;
 
 use crate::panel::svg::battery_svg::BatteryIcon;
 use crate::panel::top::PANEL_HEIGHT;
-use crate::services::battery::battery_details;
+use crate::services::{battery::battery_details, display};
 use crate::theme::theme;
 
 const WINDOW_WIDTH: f32 = 330.0;
@@ -30,6 +30,31 @@ const ANIMATION_DURATION: Duration = super::popup_motion::EXPANSION_DURATION;
 static PROGRESS: OnceLock<Mutex<Animation<f32>>> = OnceLock::new();
 static HOVERED: AtomicBool = AtomicBool::new(false);
 static HOVER_GENERATION: AtomicU64 = AtomicU64::new(0);
+static TARGET_MONITOR: OnceLock<Mutex<Option<String>>> = OnceLock::new();
+
+fn target_monitor() -> &'static Mutex<Option<String>> {
+    TARGET_MONITOR.get_or_init(|| Mutex::new(None))
+}
+
+fn is_target_monitor(monitor: &aether::Monitor) -> bool {
+    let target = target_monitor()
+        .lock()
+        .ok()
+        .and_then(|target| target.clone());
+
+    target.as_deref().map_or_else(
+        || {
+            display::is_primary(
+                &monitor.name,
+                monitor.x,
+                monitor.y,
+                &monitor.outputs,
+                monitor.origin_output.as_deref(),
+            )
+        },
+        |target| target == monitor.name,
+    )
+}
 
 pub fn set_hovered(hovered: bool) {
     super::popup_motion::set_hovered(hovered, &HOVERED, &HOVER_GENERATION);
@@ -37,6 +62,41 @@ pub fn set_hovered(hovered: bool) {
 
 pub fn hovered() -> bool {
     HOVERED.load(Ordering::Relaxed)
+}
+
+pub fn open_battery_on_hover_for_monitor(monitor: String) {
+    open_for_monitor(true, Some(monitor));
+}
+
+pub fn toggle_battery_for_monitor(monitor: String) {
+    let same_monitor = target_monitor()
+        .lock()
+        .map(|target| target.as_deref() == Some(monitor.as_str()))
+        .unwrap_or(false);
+
+    if hovered() && same_monitor {
+        close();
+    } else {
+        open_for_monitor(false, Some(monitor));
+    }
+}
+
+fn open_for_monitor(_close_on_unhover: bool, monitor: Option<String>) {
+    HOVER_GENERATION.fetch_add(1, Ordering::Relaxed);
+    HOVERED.store(true, Ordering::Relaxed);
+    if let Ok(mut target) = target_monitor().lock() {
+        *target = monitor;
+    }
+    aether::refresh();
+}
+
+fn close() {
+    HOVER_GENERATION.fetch_add(1, Ordering::Relaxed);
+    HOVERED.store(false, Ordering::Relaxed);
+    if let Ok(mut target) = target_monitor().lock() {
+        *target = None;
+    }
+    aether::refresh();
 }
 
 fn progress() -> f32 {
@@ -55,7 +115,26 @@ fn progress() -> f32 {
     animation.value()
 }
 
-pub fn battery_hint() -> LayerWindow {
+pub fn battery_hint(monitor: &aether::Monitor) -> LayerWindow {
+    if !is_target_monitor(monitor) {
+        return LayerWindow::new()
+            .width(WINDOW_WIDTH)
+            .height(WINDOW_HEIGHT)
+            .anchor_vertical(Vertical::Top)
+            .anchor_horizontal(Horizontal::Right)
+            .layer(Layer::Top)
+            .space(Zone::Ignore)
+            .namespace("aether-battery")
+            .margin(Margin {
+                top: PANEL_HEIGHT as i32,
+                right: EDGE_INSET_RIGHT as i32,
+                bottom: 0,
+                left: 0,
+            })
+            .click_through()
+            .child(blank());
+    }
+
     let progress = progress();
     let menu_open = battery_menu::open();
     let window = LayerWindow::new()
@@ -66,6 +145,7 @@ pub fn battery_hint() -> LayerWindow {
         .layer(Layer::Top)
         .space(Zone::Ignore)
         .namespace("aether-battery")
+        .visible(is_target_monitor(monitor))
         .margin(Margin {
             top: PANEL_HEIGHT as i32,
             right: EDGE_INSET_RIGHT as i32,
@@ -195,13 +275,17 @@ pub fn battery_hint() -> LayerWindow {
             .child(content),
     ]);
 
+    let monitor_name = monitor.name.clone();
     let card = Rectangle::new()
         .width(current_width)
         .height(current_height)
         .fill(Color::TRANSPARENT)
         .cursor(aether::Cursor::Pointer)
         .on_hover(set_hovered)
-        .on_click(|_| battery_menu::toggle_open())
+        .on_click(move |_| {
+            super::battery_menu::set_target_monitor(Some(monitor_name.clone()));
+            battery_menu::toggle_open();
+        })
         .child(island);
 
     let input = InputArea {

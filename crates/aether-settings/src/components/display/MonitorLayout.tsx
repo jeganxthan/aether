@@ -1,9 +1,11 @@
+
 import {
+  useCallback,
   useEffect,
   useMemo,
   useRef,
   useState,
-  type PointerEvent,
+  type PointerEvent as ReactPointerEvent,
 } from "react";
 import {
   ArrowDown,
@@ -14,6 +16,7 @@ import {
   Monitor,
   Star,
 } from "lucide-react";
+
 import type { DisplayOutput } from "../../services/display";
 
 export interface DisplayPosition {
@@ -49,17 +52,30 @@ interface MonitorLayoutProps {
 
 const CANVAS_HEIGHT = 280;
 const CANVAS_PADDING = 24;
+const MIN_SCALE = 0.025;
+const MAX_SCALE = 0.38;
 
 function dimensions(display: DisplayOutput) {
   const mode = display.currentMode;
-  if (!mode) return { width: 1280 / display.scale, height: 720 / display.scale };
+  const scale = Math.max(display.scale || 1, 0.1);
 
-  const rotated = ["90", "270", "flipped-90", "flipped-270"].includes(
-    display.transform,
-  );
+  if (!mode) {
+    return {
+      width: 1280 / scale,
+      height: 720 / scale,
+    };
+  }
+
+  const rotated = [
+    "90",
+    "270",
+    "flipped-90",
+    "flipped-270",
+  ].includes(display.transform);
+
   return {
-    width: (rotated ? mode.height : mode.width) / display.scale,
-    height: (rotated ? mode.width : mode.height) / display.scale,
+    width: (rotated ? mode.height : mode.width) / scale,
+    height: (rotated ? mode.width : mode.height) / scale,
   };
 }
 
@@ -68,14 +84,16 @@ function directionForDrop(
   clientX: number,
   clientY: number,
 ): Direction {
-  const x = (clientX - bounds.left) / bounds.width;
-  const y = (clientY - bounds.top) / bounds.height;
+  const x = (clientX - bounds.left) / Math.max(bounds.width, 1);
+  const y = (clientY - bounds.top) / Math.max(bounds.height, 1);
+
   const horizontalDistance = Math.abs(x - 0.5);
   const verticalDistance = Math.abs(y - 0.5);
 
   if (horizontalDistance >= verticalDistance) {
     return x < 0.5 ? "left" : "right";
   }
+
   return y < 0.5 ? "top" : "bottom";
 }
 
@@ -115,45 +133,83 @@ export default function MonitorLayout({
   onLayoutChange,
 }: MonitorLayoutProps) {
   const canvasRef = useRef<HTMLDivElement>(null);
+  const dragHandleRef = useRef<HTMLDivElement>(null);
+  const draggingRef = useRef<DragState | null>(null);
+
   const [canvasWidth, setCanvasWidth] = useState(640);
   const [dragging, setDragging] = useState<DragState | null>(null);
   const [dropTarget, setDropTarget] = useState<DropTarget | null>(null);
+
+  const updateDragState = useCallback((next: DragState | null) => {
+    draggingRef.current = next;
+    setDragging(next);
+  }, []);
 
   useEffect(() => {
     const node = canvasRef.current;
     if (!node) return;
 
     const observer = new ResizeObserver(([entry]) => {
-      setCanvasWidth(entry.contentRect.width);
+      if (entry) {
+        setCanvasWidth(Math.max(1, entry.contentRect.width));
+      }
     });
+
     observer.observe(node);
+
     return () => observer.disconnect();
   }, []);
 
   const layout = useMemo(() => {
     const items = displays.map((display) => {
-      const position = positions[display.name] ?? { x: display.x, y: display.y };
-      return { display, position, size: dimensions(display) };
+      const position =
+        positions[display.name] ?? { x: display.x, y: display.y };
+
+      return {
+        display,
+        position,
+        size: dimensions(display),
+      };
     });
+
     if (items.length === 0) return [];
 
     const minX = Math.min(...items.map((item) => item.position.x));
     const minY = Math.min(...items.map((item) => item.position.y));
+
     const maxX = Math.max(
       ...items.map((item) => item.position.x + item.size.width),
     );
+
     const maxY = Math.max(
       ...items.map((item) => item.position.y + item.size.height),
     );
+
     const worldWidth = Math.max(maxX - minX, 1);
     const worldHeight = Math.max(maxY - minY, 1);
-    const scale = Math.min(
-      (canvasWidth - CANVAS_PADDING * 2) / worldWidth,
-      (CANVAS_HEIGHT - CANVAS_PADDING * 2) / worldHeight,
-      0.38,
+
+    const availableWidth = Math.max(
+      1,
+      canvasWidth - CANVAS_PADDING * 2,
     );
+
+    const availableHeight = CANVAS_HEIGHT - CANVAS_PADDING * 2;
+
+    // The scale is calculated from the committed layout. It stays
+    // unchanged while dragging because positions are not updated
+    // until the pointer is released.
+    const scale = Math.max(
+      MIN_SCALE,
+      Math.min(
+        availableWidth / worldWidth,
+        availableHeight / worldHeight,
+        MAX_SCALE,
+      ),
+    );
+
     const scaledWidth = worldWidth * scale;
     const scaledHeight = worldHeight * scale;
+
     const offsetX = (canvasWidth - scaledWidth) / 2;
     const offsetY = (CANVAS_HEIGHT - scaledHeight) / 2;
 
@@ -168,139 +224,277 @@ export default function MonitorLayout({
     }));
   }, [canvasWidth, displays, positions]);
 
-  function findDropTarget(
-    source: string,
-    clientX: number,
-    clientY: number,
-  ): DropTarget | null {
-    const element = document
-      .elementFromPoint(clientX, clientY)
-      ?.closest<HTMLElement>("[data-monitor-name]");
-    const targetName = element?.dataset.monitorName;
-    if (!element || !targetName || targetName === source) return null;
+  const findDropTarget = useCallback(
+    (
+      source: string,
+      clientX: number,
+      clientY: number,
+    ): DropTarget | null => {
+      const element = document
+        .elementFromPoint(clientX, clientY)
+        ?.closest<HTMLElement>("[data-monitor-name]");
 
-    return {
-      name: targetName,
-      direction: directionForDrop(
-        element.getBoundingClientRect(),
+      const targetName = element?.dataset.monitorName;
+
+      if (!element || !targetName || targetName === source) {
+        return null;
+      }
+
+      return {
+        name: targetName,
+        direction: directionForDrop(
+          element.getBoundingClientRect(),
+          clientX,
+          clientY,
+        ),
+      };
+    },
+    [],
+  );
+
+  const startDragging = useCallback(
+    (
+      event: ReactPointerEvent<HTMLDivElement>,
+      name: string,
+    ) => {
+      if (
+        name === primaryName ||
+        event.button !== 0 ||
+        draggingRef.current
+      ) {
+        return;
+      }
+
+      const monitorElement = event.currentTarget.closest<HTMLElement>(
+        "[data-monitor-name]",
+      );
+
+      if (!monitorElement) return;
+
+      event.preventDefault();
+
+      const bounds = monitorElement.getBoundingClientRect();
+
+      const next: DragState = {
+        name,
+        pointerId: event.pointerId,
+        clientX: event.clientX,
+        clientY: event.clientY,
+        offsetX: event.clientX - bounds.left,
+        offsetY: event.clientY - bounds.top,
+      };
+
+      try {
+        event.currentTarget.setPointerCapture(event.pointerId);
+      } catch {
+        // The global pointer listeners below also handle the drag.
+      }
+
+      dragHandleRef.current = event.currentTarget;
+      updateDragState(next);
+      setDropTarget(null);
+    },
+    [primaryName, updateDragState],
+  );
+
+  const moveMonitor = useCallback(
+    (source: string, target: string, direction: Direction) => {
+      if (source === target || source === primaryName) return;
+
+      const targetDisplay = displays.find(
+        (display) => display.name === target,
+      );
+
+      const sourceDisplay = displays.find(
+        (display) => display.name === source,
+      );
+
+      if (!targetDisplay || !sourceDisplay) return;
+
+      const targetPosition =
+        target === primaryName
+          ? { x: 0, y: 0 }
+          : positions[target] ?? {
+              x: targetDisplay.x,
+              y: targetDisplay.y,
+            };
+
+      const targetSize = dimensions(targetDisplay);
+      const sourceSize = dimensions(sourceDisplay);
+
+      let x = targetPosition.x;
+      let y = targetPosition.y;
+
+      switch (direction) {
+        case "left":
+          x -= sourceSize.width;
+          y += (targetSize.height - sourceSize.height) / 2;
+          break;
+
+        case "right":
+          x += targetSize.width;
+          y += (targetSize.height - sourceSize.height) / 2;
+          break;
+
+        case "top":
+          y -= sourceSize.height;
+          x += (targetSize.width - sourceSize.width) / 2;
+          break;
+
+        case "bottom":
+          y += targetSize.height;
+          x += (targetSize.width - sourceSize.width) / 2;
+          break;
+      }
+
+      const nextPositions = {
+        ...positions,
+        [primaryName]: { x: 0, y: 0 },
+        [source]: { x, y },
+      };
+
+      onLayoutChange(nextPositions);
+    },
+    [displays, onLayoutChange, positions, primaryName],
+  );
+
+  const finishDragging = useCallback(
+    (clientX: number, clientY: number, pointerId: number) => {
+      const current = draggingRef.current;
+
+      if (!current || current.pointerId !== pointerId) return;
+
+      const target = findDropTarget(
+        current.name,
         clientX,
         clientY,
-      ),
-    };
-  }
+      );
 
-  function startDragging(
-    event: PointerEvent<HTMLDivElement>,
-    name: string,
-  ) {
-    if (name === primaryName || event.button !== 0) return;
+      // Clear drag state first so no stale pointer events can
+      // accidentally trigger another placement.
+      updateDragState(null);
+      setDropTarget(null);
 
-    event.preventDefault();
-    event.currentTarget.setPointerCapture(event.pointerId);
-    const bounds = event.currentTarget
-      .closest<HTMLElement>("[data-monitor-name]")
-      ?.getBoundingClientRect();
-    if (!bounds) return;
+      const handle = dragHandleRef.current;
+      dragHandleRef.current = null;
 
-    setDragging({
-      name,
-      pointerId: event.pointerId,
-      clientX: event.clientX,
-      clientY: event.clientY,
-      offsetX: event.clientX - bounds.left,
-      offsetY: event.clientY - bounds.top,
+      if (handle?.hasPointerCapture(pointerId)) {
+        try {
+          handle.releasePointerCapture(pointerId);
+        } catch {
+          // Capture may already have been released by the browser.
+        }
+      }
+
+      if (target) {
+        moveMonitor(current.name, target.name, target.direction);
+      }
+    },
+    [findDropTarget, moveMonitor, updateDragState],
+  );
+
+  const cancelDragging = useCallback(
+    (pointerId: number) => {
+      const current = draggingRef.current;
+
+      if (!current || current.pointerId !== pointerId) return;
+
+      const handle = dragHandleRef.current;
+      dragHandleRef.current = null;
+
+      updateDragState(null);
+      setDropTarget(null);
+
+      if (handle?.hasPointerCapture(pointerId)) {
+        try {
+          handle.releasePointerCapture(pointerId);
+        } catch {
+          // Capture may already have been released.
+        }
+      }
+    },
+    [updateDragState],
+  );
+
+  // Listen on window so the drag can finish even when the pointer
+  // leaves the small handle or the preview canvas.
+  useEffect(() => {
+    if (!dragging) return;
+
+    function handlePointerMove(event: globalThis.PointerEvent) {
+      const current = draggingRef.current;
+
+      if (!current || current.pointerId !== event.pointerId) return;
+
+      event.preventDefault();
+
+      const next = {
+        ...current,
+        clientX: event.clientX,
+        clientY: event.clientY,
+      };
+
+      draggingRef.current = next;
+      setDragging(next);
+
+      setDropTarget(
+        findDropTarget(
+          current.name,
+          event.clientX,
+          event.clientY,
+        ),
+      );
+    }
+
+    function handlePointerUp(event: globalThis.PointerEvent) {
+      finishDragging(event.clientX, event.clientY, event.pointerId);
+    }
+
+    function handlePointerCancel(event: globalThis.PointerEvent) {
+      cancelDragging(event.pointerId);
+    }
+
+    window.addEventListener("pointermove", handlePointerMove, {
+      passive: false,
     });
-  }
+    window.addEventListener("pointerup", handlePointerUp);
+    window.addEventListener("pointercancel", handlePointerCancel);
 
-  function updateDragging(event: PointerEvent<HTMLDivElement>) {
-    if (!dragging || dragging.pointerId !== event.pointerId) return;
-
-    setDragging((current) =>
-      current
-        ? {
-            ...current,
-            clientX: event.clientX,
-            clientY: event.clientY,
-          }
-        : current,
-    );
-    setDropTarget(
-      findDropTarget(dragging.name, event.clientX, event.clientY),
-    );
-  }
-
-  function finishDragging(event: PointerEvent<HTMLDivElement>) {
-    if (!dragging || dragging.pointerId !== event.pointerId) return;
-
-    const target = findDropTarget(
-      dragging.name,
-      event.clientX,
-      event.clientY,
-    );
-    if (target) {
-      moveMonitor(dragging.name, target.name, target.direction);
-    }
-
-    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
-      event.currentTarget.releasePointerCapture(event.pointerId);
-    }
-    setDragging(null);
-    setDropTarget(null);
-  }
-
-  function cancelDragging(event: PointerEvent<HTMLDivElement>) {
-    if (!dragging || dragging.pointerId !== event.pointerId) return;
-    setDragging(null);
-    setDropTarget(null);
-  }
-
-  function moveMonitor(source: string, target: string, direction: Direction) {
-    if (source === target || source === primaryName) return;
-
-    const targetDisplay = displays.find((display) => display.name === target);
-    const sourceDisplay = displays.find((display) => display.name === source);
-    if (!targetDisplay || !sourceDisplay) return;
-
-    const targetPosition = positions[target] ?? {
-      x: targetDisplay.x,
-      y: targetDisplay.y,
+    return () => {
+      window.removeEventListener("pointermove", handlePointerMove);
+      window.removeEventListener("pointerup", handlePointerUp);
+      window.removeEventListener("pointercancel", handlePointerCancel);
     };
-    const targetSize = dimensions(targetDisplay);
-    const sourceSize = dimensions(sourceDisplay);
-    const nextPosition: DisplayPosition = {
-      x: targetPosition.x,
-      y: targetPosition.y,
-    };
-
-    if (direction === "left") nextPosition.x -= sourceSize.width;
-    if (direction === "right") nextPosition.x += targetSize.width;
-    if (direction === "top") nextPosition.y -= sourceSize.height;
-    if (direction === "bottom") nextPosition.y += targetSize.height;
-
-    onLayoutChange({ ...positions, [source]: nextPosition });
-  }
+  }, [
+    dragging?.pointerId,
+    findDropTarget,
+    finishDragging,
+    cancelDragging,
+  ]);
 
   function setPrimary(name: string) {
-    const anchorDisplay = displays.find((display) => display.name === name);
+    if (name === primaryName) return;
+
     const anchorPosition = positions[name] ?? {
-      x: anchorDisplay?.x ?? 0,
-      y: anchorDisplay?.y ?? 0,
+      x: displays.find((display) => display.name === name)?.x ?? 0,
+      y: displays.find((display) => display.name === name)?.y ?? 0,
     };
-    const rebased = Object.fromEntries(
-      displays.map((display) => {
-        const position = positions[display.name] ?? {
-          x: display.x,
-          y: display.y,
-        };
-        return [
-          display.name,
-          {
-            x: position.x - anchorPosition.x,
-            y: position.y - anchorPosition.y,
-          },
-        ];
-      }),
-    );
+
+    const rebased: Record<string, DisplayPosition> = {};
+
+    for (const display of displays) {
+      const position = positions[display.name] ?? {
+        x: display.x,
+        y: display.y,
+      };
+
+      rebased[display.name] = {
+        x: position.x - anchorPosition.x,
+        y: position.y - anchorPosition.y,
+      };
+    }
+
+    rebased[name] = { x: 0, y: 0 };
 
     onPrimaryChange(name);
     onSelect(name);
@@ -319,8 +513,10 @@ export default function MonitorLayout({
             Change the primary display to move the anchored monitor.
           </p>
         </div>
+
         <span className="rounded-full border border-white/10 px-2.5 py-1 text-[11px] text-neutral-400">
-          {displays.length} {displays.length === 1 ? "display" : "displays"}
+          {displays.length}{" "}
+          {displays.length === 1 ? "display" : "displays"}
         </span>
       </div>
 
@@ -345,35 +541,47 @@ export default function MonitorLayout({
                 <div
                   key={display.name}
                   data-monitor-name={display.name}
-                  style={style}
+                  style={{
+                    ...style,
+                    zIndex: isDragging ? 1 : 0,
+                  }}
                   className={[
-                    "absolute flex min-h-0 flex-col rounded-xl border p-2 text-left transition-[left,top,width,height,opacity,transform,border-color] duration-200",
+                    "absolute flex min-h-0 flex-col rounded-xl border p-2 text-left",
+                    "transition-colors duration-150",
                     isSelected
                       ? "border-[var(--accent)] bg-white/[0.08]"
                       : "border-white/10 bg-[#1b1c1f] hover:border-white/25",
-                    "cursor-default",
-                    isDragging ? "scale-95 opacity-40" : "",
+                    isDragging ? "opacity-35" : "",
                     isDropTarget
                       ? "border-[var(--accent)] shadow-[0_0_24px_#9b87f544]"
                       : "",
                   ].join(" ")}
-                  aria-label={`${display.name}${isPrimary ? ", primary display" : ", draggable display"}`}
+                  aria-label={`${display.name}${
+                    isPrimary
+                      ? ", primary display"
+                      : ", draggable display"
+                  }`}
                 >
                   <div className="flex items-center justify-between">
                     <div
+                      ref={
+                        isDragging
+                          ? dragHandleRef
+                          : undefined
+                      }
                       onPointerDown={(event) =>
                         startDragging(event, display.name)
                       }
-                      onPointerMove={updateDragging}
-                      onPointerUp={finishDragging}
-                      onPointerCancel={cancelDragging}
-                      className={
+                      className={[
+                        "touch-none select-none",
                         isPrimary
                           ? "cursor-default text-neutral-700"
-                          : "touch-none cursor-grab text-neutral-500 active:cursor-grabbing"
-                      }
+                          : "cursor-grab text-neutral-500 active:cursor-grabbing",
+                      ].join(" ")}
                       aria-label={
-                        isPrimary ? "Primary display" : `Drag ${display.name}`
+                        isPrimary
+                          ? "Primary display"
+                          : `Drag ${display.name}`
                       }
                       title={
                         isPrimary
@@ -383,6 +591,7 @@ export default function MonitorLayout({
                     >
                       <Grip size={13} />
                     </div>
+
                     {isPrimary && (
                       <span className="flex items-center gap-1 rounded-full bg-[var(--accent)]/15 px-1.5 py-0.5 text-[9px] text-neutral-200">
                         <Star size={9} />
@@ -390,25 +599,36 @@ export default function MonitorLayout({
                       </span>
                     )}
                   </div>
+
                   <button
                     type="button"
                     onClick={() => onSelect(display.name)}
                     className="flex min-h-0 flex-1 flex-col items-center justify-center gap-1 overflow-hidden text-center"
                   >
                     <Monitor
-                      size={Math.min(32, Math.max(18, style.height * 0.3))}
+                      size={Math.min(
+                        32,
+                        Math.max(18, style.height * 0.3),
+                      )}
                       strokeWidth={1.3}
-                      className={isSelected ? "text-neutral-100" : "text-neutral-500"}
+                      className={
+                        isSelected
+                          ? "text-neutral-100"
+                          : "text-neutral-500"
+                      }
                     />
+
                     <span className="max-w-full truncate text-[10px] font-medium text-neutral-100">
                       {display.name}
                     </span>
+
                     <span className="text-[9px] text-neutral-500">
                       {display.currentMode
                         ? `${display.currentMode.width} × ${display.currentMode.height}`
                         : "Resolution unavailable"}
                     </span>
                   </button>
+
                   {isDropTarget && dropTarget && (
                     <span
                       className={[
@@ -419,6 +639,7 @@ export default function MonitorLayout({
                       {placementIcon(dropTarget.direction)}
                     </span>
                   )}
+
                   {!isPrimary && (
                     <button
                       type="button"
@@ -431,12 +652,15 @@ export default function MonitorLayout({
                 </div>
               );
             })}
+
             {dragging &&
               (() => {
                 const source = layout.find(
                   ({ display }) => display.name === dragging.name,
                 );
+
                 if (!source) return null;
+
                 return (
                   <div
                     className="pointer-events-none fixed z-50 flex flex-col items-center justify-center rounded-xl border border-[var(--accent)] bg-[#202027]/95 p-2 text-center shadow-[0_12px_36px_#0009] backdrop-blur-md"
@@ -445,10 +669,13 @@ export default function MonitorLayout({
                       top: dragging.clientY - dragging.offsetY,
                       width: source.style.width,
                       height: source.style.height,
-                      transform: "scale(1.03)",
                     }}
                   >
-                    <Monitor size={24} className="text-[var(--accent)]" />
+                    <Monitor
+                      size={24}
+                      className="text-[var(--accent)]"
+                    />
+
                     <span className="mt-1 max-w-full truncate text-[10px] font-medium text-neutral-100">
                       {source.display.name}
                     </span>
@@ -462,7 +689,8 @@ export default function MonitorLayout({
             <span className="text-neutral-300">
               {primaryName || "Not selected"}
             </span>
-            {" · "}Drop on the top, bottom, left, or right edge to choose placement.
+            {" · "}
+            Drop on the top, bottom, left, or right edge to choose placement.
           </p>
         </>
       )}

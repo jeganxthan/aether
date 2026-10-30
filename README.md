@@ -44,6 +44,9 @@ revisions, and license details are documented in
   shell.
 - **Screen utilities:** Take full or selective screenshots, extract text from
   a selected area with OCR, and pick a color from the screen.
+- **Fast clipboard history:** Open the focused clipboard island with `Super+C`,
+  search text and image clips, copy an item with `Enter`, and pin the selected
+  item with `Alt+P`.
 - **A native Wayland shell:** A Rust panel, quick-access popups, system
   integrations, and an optional labwc + SceneFX session.
 

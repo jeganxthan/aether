@@ -51,6 +51,11 @@ fn primary_display_file() -> Result<PathBuf, String> {
     Ok(config_dir.join("aether-shell/primary-display"))
 }
 
+fn display_layout_file() -> Result<PathBuf, String> {
+    let path = primary_display_file()?;
+    Ok(path.with_file_name("display-layout"))
+}
+
 fn parse_mode(line: &str) -> Option<DisplayMode> {
     let line = line.trim();
     let (dimensions, rest) = line.split_once(" px,")?;
@@ -204,6 +209,102 @@ pub fn display_primary_set(name: String) -> Result<(), String> {
         .map_err(|error| format!("Could not save the primary display setting: {error}"))?;
     std::fs::rename(&temporary, &path)
         .map_err(|error| format!("Could not activate the primary display setting: {error}"))
+}
+
+#[tauri::command]
+pub fn display_layout_get() -> Result<String, String> {
+    let path = display_layout_file()?;
+    match std::fs::read_to_string(path) {
+        Ok(value) if matches!(value.trim(), "extend" | "mirror" | "external") => {
+            Ok(value.trim().to_owned())
+        }
+        Ok(_) => Ok("extend".to_owned()),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok("extend".to_owned()),
+        Err(error) => Err(format!("Could not read the display layout: {error}")),
+    }
+}
+
+#[tauri::command]
+pub fn display_layout_set(layout: String) -> Result<(), String> {
+    if !matches!(layout.as_str(), "extend" | "mirror" | "external") {
+        return Err("Invalid display layout.".into());
+    }
+
+    let outputs = display_list()?;
+    let connected = outputs.iter().collect::<Vec<_>>();
+    if connected.is_empty() {
+        return Err("No displays were found.".into());
+    }
+
+    match layout.as_str() {
+        "mirror" => {
+            for output in connected.iter().skip(1) {
+                let Some(mode) = output
+                    .current_mode
+                    .as_ref()
+                    .or_else(|| output.modes.iter().find(|mode| mode.preferred))
+                    .or_else(|| output.modes.first())
+                else {
+                    continue;
+                };
+                run_wlr_randr(&vec![
+                    "--output".into(),
+                    output.name.clone(),
+                    "--on".into(),
+                    "--mode".into(),
+                    format!("{}x{}@{:.3}Hz", mode.width, mode.height, mode.refresh_rate),
+                    "--pos".into(),
+                    "0,0".into(),
+                ])?;
+            }
+        }
+        "external" => {
+            for output in &connected {
+                let lower = output.name.to_ascii_lowercase();
+                if lower.starts_with("edp") || lower.starts_with("lvds") || lower.starts_with("dsi")
+                {
+                    run_wlr_randr(&vec![
+                        "--output".into(),
+                        output.name.clone(),
+                        "--off".into(),
+                    ])?;
+                }
+            }
+        }
+        "extend" => {
+            for output in &connected {
+                if output.enabled {
+                    continue;
+                }
+                let Some(mode) = output
+                    .modes
+                    .iter()
+                    .find(|mode| mode.preferred)
+                    .or_else(|| output.modes.first())
+                else {
+                    continue;
+                };
+                run_wlr_randr(&vec![
+                    "--output".into(),
+                    output.name.clone(),
+                    "--on".into(),
+                    "--mode".into(),
+                    format!("{}x{}@{:.3}Hz", mode.width, mode.height, mode.refresh_rate),
+                    "--pos".into(),
+                    format!("{},{}", output.x, output.y),
+                ])?;
+            }
+        }
+        _ => unreachable!(),
+    }
+
+    let path = display_layout_file()?;
+    let parent = path
+        .parent()
+        .ok_or("Could not determine display settings directory")?;
+    std::fs::create_dir_all(parent)
+        .map_err(|error| format!("Could not create display settings directory: {error}"))?;
+    std::fs::write(path, layout).map_err(|error| format!("Could not save display layout: {error}"))
 }
 
 #[tauri::command]

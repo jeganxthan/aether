@@ -284,7 +284,7 @@ fn handle(event: NotificationEvent) -> bool {
             let expired_at = expiry_of(&notification);
 
             popups.push_back(Popup {
-                notification,
+                notification: notification.clone(),
                 offset: 1.0,
                 slide_from: 1.0,
                 slide_started_at: Instant::now(),
@@ -299,6 +299,10 @@ fn handle(event: NotificationEvent) -> bool {
 
             while popups.len() > MAX_VISIBLE {
                 popups.pop_front();
+            }
+
+            if !do_not_disturb() {
+                super::sounds::play_notification(&notification);
             }
 
             true

@@ -13,7 +13,7 @@ use aether_services::notifications::Notification;
 use crate::panel::notification::icon_path;
 use crate::panel::svg::recolor::ink_image;
 use crate::panel::top::{NOTIFICATION_EDGE_RIGHT, PANEL_HEIGHT};
-use crate::services::notifications;
+use crate::services::{display, notifications};
 use crate::theme::theme;
 
 const MENU_WIDTH: f32 = 360.0;
@@ -37,6 +37,31 @@ static HOVER_GENERATION: AtomicU64 = AtomicU64::new(0);
 static PROGRESS: OnceLock<Mutex<Animation<f32>>> = OnceLock::new();
 static HINT_PROGRESS: OnceLock<Mutex<Animation<f32>>> = OnceLock::new();
 static DRAG_ORIGINS: OnceLock<Mutex<HashMap<u32, f32>>> = OnceLock::new();
+static TARGET_MONITOR: OnceLock<Mutex<Option<String>>> = OnceLock::new();
+
+fn target_monitor() -> &'static Mutex<Option<String>> {
+    TARGET_MONITOR.get_or_init(|| Mutex::new(None))
+}
+
+fn is_target_monitor(monitor: &aether::Monitor) -> bool {
+    let target = target_monitor()
+        .lock()
+        .ok()
+        .and_then(|target| target.clone());
+
+    target.as_deref().map_or_else(
+        || {
+            display::is_primary(
+                &monitor.name,
+                monitor.x,
+                monitor.y,
+                &monitor.outputs,
+                monitor.origin_output.as_deref(),
+            )
+        },
+        |target| target == monitor.name,
+    )
+}
 
 fn premium_text(value: impl Into<String>) -> Text {
     Text::new(value).font("Maple Mono")
@@ -178,6 +203,38 @@ pub fn close() {
     }
 }
 
+pub fn open_notification_on_hover_for_monitor(monitor: String) {
+    open_for_monitor(true, Some(monitor));
+}
+
+pub fn toggle_notification_for_monitor(monitor: String) {
+    let same_monitor = target_monitor()
+        .lock()
+        .map(|target| target.as_deref() == Some(monitor.as_str()))
+        .unwrap_or(false);
+
+    if open() && same_monitor {
+        close();
+    } else {
+        open_for_monitor(false, Some(monitor));
+    }
+}
+
+pub fn set_target_monitor(monitor: Option<String>) {
+    if let Ok(mut target) = target_monitor().lock() {
+        *target = monitor;
+    }
+}
+
+fn open_for_monitor(close_on_unhover: bool, monitor: Option<String>) {
+    HOVER_GENERATION.fetch_add(1, Ordering::Relaxed);
+    HOVERED.store(true, Ordering::Relaxed);
+    if let Ok(mut target) = target_monitor().lock() {
+        *target = monitor;
+    }
+    aether::refresh();
+}
+
 fn animation_value(animation: &'static OnceLock<Mutex<Animation<f32>>>, target: bool) -> f32 {
     let animation = animation.get_or_init(|| {
         Mutex::new(
@@ -232,7 +289,26 @@ fn island_shadow_layer(width: f32, height: f32, radius: f32, opacity: f32) -> Re
         )
 }
 
-pub fn notification_hint() -> LayerWindow {
+pub fn notification_hint(monitor: &aether::Monitor) -> LayerWindow {
+    if !is_target_monitor(monitor) {
+        return LayerWindow::new()
+            .width(HINT_WINDOW_WIDTH)
+            .height(HINT_WINDOW_HEIGHT)
+            .anchor_vertical(Vertical::Top)
+            .anchor_horizontal(Horizontal::Right)
+            .layer(Layer::Top)
+            .space(Zone::Ignore)
+            .namespace("aether-notification-hint")
+            .margin(Margin {
+                top: PANEL_HEIGHT as i32,
+                right: NOTIFICATION_EDGE_RIGHT as i32,
+                bottom: 0,
+                left: 0,
+            })
+            .click_through()
+            .child(blank());
+    }
+
     let menu_progress = menu_progress();
     let hint_progress = hint_progress(menu_progress);
     let current_width = hint_width(hint_progress);
@@ -273,13 +349,15 @@ pub fn notification_hint() -> LayerWindow {
     .gap(9.0)
     .align(Align::Center);
 
+    let monitor_name = monitor.name.clone();
     let card = Rectangle::new()
         .width(current_width)
         .height(current_height)
         .fill(Color::TRANSPARENT)
         .on_hover(set_hovered)
-        .on_click(|_| {
+        .on_click(move |_| {
             if !open() {
+                super::notification_menu::set_target_monitor(Some(monitor_name.clone()));
                 toggle_open();
             }
         })
@@ -309,6 +387,7 @@ pub fn notification_hint() -> LayerWindow {
         .layer(Layer::Top)
         .space(Zone::Ignore)
         .namespace("aether-notification-hint")
+        .visible(is_target_monitor(monitor))
         .margin(Margin {
             top: PANEL_HEIGHT as i32,
             right: NOTIFICATION_EDGE_RIGHT as i32,
@@ -336,7 +415,26 @@ pub fn notification_hint() -> LayerWindow {
     )
 }
 
-pub fn notification_menu() -> LayerWindow {
+pub fn notification_menu(monitor: &aether::Monitor) -> LayerWindow {
+    if !is_target_monitor(monitor) {
+        return LayerWindow::new()
+            .width(Full)
+            .height(Full)
+            .anchor_vertical(Vertical::Top)
+            .anchor_horizontal(Horizontal::Right)
+            .layer(Layer::Overlay)
+            .space(Zone::Ignore)
+            .namespace("aether-notification-menu")
+            .keyboard(Keyboard::OnDemand)
+            .on_key(|key| {
+                if key == Key::Escape {
+                    close();
+                }
+            })
+            .click_through()
+            .child(blank());
+    }
+
     let notifications = notifications::active_notifications();
     let count = notifications.len();
     let progress = menu_progress();
@@ -363,6 +461,7 @@ pub fn notification_menu() -> LayerWindow {
         .layer(Layer::Overlay)
         .space(Zone::Ignore)
         .namespace("aether-notification-menu")
+        .visible(is_target_monitor(monitor))
         .keyboard(Keyboard::OnDemand)
         .on_key(|key| {
             if key == Key::Escape {

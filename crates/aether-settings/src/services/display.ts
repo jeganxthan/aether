@@ -37,6 +37,9 @@ export const displayService = {
   primary: () => invoke<string | null>("display_primary_get"),
   setPrimary: (name: string) =>
     invoke<void>("display_primary_set", { name }),
+  layout: () => invoke<"extend" | "mirror" | "external">("display_layout_get"),
+  setLayout: (layout: "extend" | "mirror" | "external") =>
+    invoke<void>("display_layout_set", { layout }),
 
   apply: (settings: DisplaySettings) =>
     invoke<void>("display_apply", { ...settings }),

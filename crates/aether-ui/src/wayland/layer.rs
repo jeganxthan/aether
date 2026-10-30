@@ -74,6 +74,10 @@ impl LayerShellHandler for WaylandState {
     }
 
     fn closed(&mut self, _: &Connection, _: &QueueHandle<Self>, layer_surface: &LayerSurface) {
+        if self.reopen_layer(layer_surface.wl_surface()) {
+            return;
+        }
+
         self.close(layer_surface.wl_surface());
     }
 }

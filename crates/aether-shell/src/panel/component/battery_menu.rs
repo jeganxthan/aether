@@ -16,7 +16,7 @@ use aether_services::power::{PowerProfile, PowerProfileService};
 use super::battery_popup::{COLLAPSED_BODY_WIDTH, current_island_metrics};
 use crate::panel::svg::battery_svg::BatteryIcon;
 use crate::panel::top::PANEL_HEIGHT;
-use crate::services::battery::battery_details;
+use crate::services::{battery::battery_details, display};
 use crate::theme::theme;
 
 const BOX_WIDTH: f32 = 330.0;
@@ -54,6 +54,31 @@ static BUSY: AtomicBool = AtomicBool::new(false);
 static ANIMATION: OnceLock<Mutex<Animation<f32>>> = OnceLock::new();
 static PROFILE: OnceLock<Mutex<Option<PowerProfile>>> = OnceLock::new();
 static ERROR: OnceLock<Mutex<Option<String>>> = OnceLock::new();
+static TARGET_MONITOR: OnceLock<Mutex<Option<String>>> = OnceLock::new();
+
+fn target_monitor() -> &'static Mutex<Option<String>> {
+    TARGET_MONITOR.get_or_init(|| Mutex::new(None))
+}
+
+fn is_target_monitor(monitor: &aether::Monitor) -> bool {
+    let target = target_monitor()
+        .lock()
+        .ok()
+        .and_then(|target| target.clone());
+
+    target.as_deref().map_or_else(
+        || {
+            display::is_primary(
+                &monitor.name,
+                monitor.x,
+                monitor.y,
+                &monitor.outputs,
+                monitor.origin_output.as_deref(),
+            )
+        },
+        |target| target == monitor.name,
+    )
+}
 
 fn text(value: impl Into<String>) -> Text {
     Text::new(value).font("Maple Mono")
@@ -85,6 +110,12 @@ pub fn toggle_open() {
 pub fn close() {
     if OPEN.swap(false, Ordering::Relaxed) {
         aether::refresh();
+    }
+}
+
+pub fn set_target_monitor(monitor: Option<String>) {
+    if let Ok(mut target) = target_monitor().lock() {
+        *target = monitor;
     }
 }
 
@@ -251,7 +282,26 @@ fn blank() -> Rectangle {
         .fill(Color::TRANSPARENT)
 }
 
-pub fn battery_menu() -> LayerWindow {
+pub fn battery_menu(monitor: &aether::Monitor) -> LayerWindow {
+    if !is_target_monitor(monitor) {
+        return LayerWindow::new()
+            .width(aether::Full)
+            .height(aether::Full)
+            .anchor_vertical(Vertical::Top)
+            .anchor_horizontal(Horizontal::Right)
+            .layer(Layer::Overlay)
+            .space(Zone::Ignore)
+            .namespace("aether-battery-menu")
+            .keyboard(Keyboard::OnDemand)
+            .on_key(|key| {
+                if key == Key::Escape {
+                    close();
+                }
+            })
+            .click_through()
+            .child(blank());
+    }
+
     let progress = animation_progress();
 
     let window = LayerWindow::new()
@@ -262,6 +312,7 @@ pub fn battery_menu() -> LayerWindow {
         .layer(Layer::Overlay)
         .space(Zone::Ignore)
         .namespace("aether-battery-menu")
+        .visible(is_target_monitor(monitor))
         .keyboard(Keyboard::OnDemand)
         .on_key(|key| {
             if key == Key::Escape {

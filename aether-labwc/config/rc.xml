@@ -1,0 +1,11 @@
+<labwc_config>
+  <keyboard>
+    <default />
+    <keybind key="W-C">
+      <action name="Execute" command="aether-shell ipc clipboard open" />
+    </keybind>
+    <keybind key="A-P">
+      <action name="Execute" command="aether-shell ipc clipboard pin" />
+    </keybind>
+  </keyboard>
+</labwc_config>

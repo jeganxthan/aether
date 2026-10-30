@@ -25,11 +25,7 @@ interface WifiNetwork {
   connected: boolean;
 }
 
-interface WifiPageProps {
-  active: boolean;
-}
-
-export default function WifiPage({ active }: WifiPageProps) {
+export default function WifiPage() {
   const [enabled, setEnabled] = useState(
     () => getCachedWifiEnabled() ?? false,
   );

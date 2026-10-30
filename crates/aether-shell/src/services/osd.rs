@@ -2,11 +2,14 @@ use std::sync::{Mutex, OnceLock, PoisonError};
 use std::time::{Duration, Instant};
 
 use aether::refresh as wake;
-use aether_services::osd::{AudioService, AudioState, BrightnessService, BrightnessState};
+use aether_services::osd::{
+    AudioService, AudioState, BrightnessService, BrightnessState, KeyboardBacklightService,
+    KeyboardBacklightState, MicrophoneService, MicrophoneState,
+};
 
 use super::runtime::runtime;
 
-// how often the volume and brightness are read to notice a change
+// how often the audio and lighting levels are read to notice a change
 const POLL: Duration = Duration::from_millis(250);
 
 // how long the display stays after the last change before it slides away
@@ -20,6 +23,8 @@ pub const SLIDE_TIME: Duration = Duration::from_millis(200);
 pub enum Kind {
     Volume,
     Brightness,
+    Microphone,
+    KeyboardBrightness,
 }
 
 // one reading on screen: what it is, how much, and when it hides
@@ -44,6 +49,8 @@ struct State {
     // the last values read, so a change is what opens the display
     audio: Option<AudioState>,
     brightness: Option<BrightnessState>,
+    microphone: Option<MicrophoneState>,
+    keyboard_brightness: Option<KeyboardBacklightState>,
 
     // what is on screen now, if anything
     shown: Option<Shown>,
@@ -62,6 +69,8 @@ fn state() -> &'static Mutex<State> {
         Mutex::new(State {
             audio: None,
             brightness: None,
+            microphone: None,
+            keyboard_brightness: None,
             shown: None,
             hide_at: None,
         })
@@ -102,8 +111,8 @@ fn start() {
 }
 
 /*
- * Reads volume and brightness on a short timer, since the shell has no way to
- * be told when a keybind changes them. A reading that differs from the last
+ * Reads audio and lighting state on a short timer, since the shell has no way
+ * to be told when a keybind changes them. A reading that differs from the last
  * opens the display on that value, and the display hides itself once the last
  * change is old enough.
  */
@@ -115,8 +124,10 @@ async fn watch() {
 
         let audio = AudioService::current().ok();
         let brightness = BrightnessService::current().ok();
+        let microphone = MicrophoneService::current().ok();
+        let keyboard_brightness = KeyboardBacklightService::current().ok();
 
-        let changed = update(audio, brightness);
+        let changed = update(audio, brightness, microphone, keyboard_brightness);
 
         if changed {
             wake();
@@ -132,7 +143,12 @@ async fn watch() {
  * service answers after a failed read) never pops the display. Only a reading
  * that differs from a value already known counts as a change.
  */
-fn update(audio: Option<AudioState>, brightness: Option<BrightnessState>) -> bool {
+fn update(
+    audio: Option<AudioState>,
+    brightness: Option<BrightnessState>,
+    microphone: Option<MicrophoneState>,
+    keyboard_brightness: Option<KeyboardBacklightState>,
+) -> bool {
     let mut state = state().lock().unwrap_or_else(PoisonError::into_inner);
 
     let mut changed = false;
@@ -160,6 +176,32 @@ fn update(audio: Option<AudioState>, brightness: Option<BrightnessState>) -> boo
 
         if known.is_some_and(|known| known != level) {
             show(&mut state, Kind::Brightness, level, false);
+
+            changed = true;
+        }
+    }
+
+    if let Some(microphone) = microphone {
+        let known = state.microphone;
+        state.microphone = Some(microphone);
+
+        if known.is_some_and(|known| known != microphone) {
+            show(&mut state, Kind::Microphone, 0, microphone.muted);
+
+            changed = true;
+        }
+    }
+
+    if let Some(keyboard_brightness) = keyboard_brightness {
+        let known = state
+            .keyboard_brightness
+            .as_ref()
+            .map(|known| known.percent);
+        let level = keyboard_brightness.percent;
+        state.keyboard_brightness = Some(keyboard_brightness);
+
+        if known.is_some_and(|known| known != level) {
+            show(&mut state, Kind::KeyboardBrightness, level, false);
 
             changed = true;
         }
@@ -275,51 +317,88 @@ mod tests {
         }
     }
 
+    fn microphone(muted: bool) -> MicrophoneState {
+        MicrophoneState { muted }
+    }
+
+    fn keyboard_brightness(percent: u8) -> KeyboardBacklightState {
+        KeyboardBacklightState {
+            percent,
+            device: "test".into(),
+        }
+    }
+
     // the tests share the one global state, so they run one after another
-    fn reset() {
+    fn reset() -> std::sync::MutexGuard<'static, ()> {
+        static TEST_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+        let serial = TEST_LOCK.lock().unwrap();
         let mut state = state().lock().unwrap_or_else(PoisonError::into_inner);
 
         *state = State {
             audio: None,
             brightness: None,
+            microphone: None,
+            keyboard_brightness: None,
             shown: None,
             hide_at: None,
         };
+
+        serial
     }
 
     #[test]
     fn the_first_reading_only_primes_and_shows_nothing() {
-        reset();
+        let _serial = reset();
 
         // at startup the shell reads a value it did not change, so no display
-        assert!(!update(Some(audio(40, false)), Some(brightness(70))));
+        assert!(!update(
+            Some(audio(40, false)),
+            Some(brightness(70)),
+            Some(microphone(false)),
+            Some(keyboard_brightness(20))
+        ));
 
         assert!(state().lock().unwrap().shown.is_none());
     }
 
     #[test]
     fn a_kind_that_answers_late_still_only_primes() {
-        reset();
+        let _serial = reset();
 
         // brightness answers first and primes; audio fails its first read
-        assert!(!update(None, Some(brightness(70))));
+        assert!(!update(None, Some(brightness(70)), None, None));
         assert!(state().lock().unwrap().shown.is_none());
 
         // the first audio read succeeds later: it is a value merely read, not changed
-        assert!(!update(Some(audio(40, false)), Some(brightness(70))));
+        assert!(!update(
+            Some(audio(40, false)),
+            Some(brightness(70)),
+            None,
+            None
+        ));
         assert!(state().lock().unwrap().shown.is_none());
 
         // only the next, different reading opens the display
-        assert!(update(Some(audio(55, false)), Some(brightness(70))));
+        assert!(update(
+            Some(audio(55, false)),
+            Some(brightness(70)),
+            None,
+            None
+        ));
     }
 
     #[test]
     fn a_new_volume_opens_the_display_on_volume() {
-        reset();
+        let _serial = reset();
 
         // prime both, then change volume
-        update(Some(audio(40, false)), Some(brightness(70)));
-        assert!(update(Some(audio(55, false)), Some(brightness(70))));
+        update(Some(audio(40, false)), Some(brightness(70)), None, None);
+        assert!(update(
+            Some(audio(55, false)),
+            Some(brightness(70)),
+            None,
+            None
+        ));
 
         let shown = state().lock().unwrap().shown.expect("the display opens");
 
@@ -330,17 +409,22 @@ mod tests {
 
     #[test]
     fn stepping_the_volume_keeps_one_steady_bar() {
-        reset();
+        let _serial = reset();
 
-        update(Some(audio(40, false)), Some(brightness(70)));
-        update(Some(audio(55, false)), Some(brightness(70)));
+        update(Some(audio(40, false)), Some(brightness(70)), None, None);
+        update(Some(audio(55, false)), Some(brightness(70)), None, None);
 
         // let the first change rise all the way into place
         state().lock().unwrap().shown.as_mut().unwrap().offset = 0.0;
 
         // each further step only swaps the reading, it never drops back to the bottom
         for level in [60, 65, 70] {
-            assert!(update(Some(audio(level, false)), Some(brightness(70))));
+            assert!(update(
+                Some(audio(level, false)),
+                Some(brightness(70)),
+                None,
+                None
+            ));
 
             let shown = state().lock().unwrap().shown.unwrap();
 
@@ -352,10 +436,10 @@ mod tests {
 
     #[test]
     fn a_change_while_leaving_rises_again() {
-        reset();
+        let _serial = reset();
 
-        update(Some(audio(40, false)), Some(brightness(70)));
-        update(Some(audio(55, false)), Some(brightness(70)));
+        update(Some(audio(40, false)), Some(brightness(70)), None, None);
+        update(Some(audio(55, false)), Some(brightness(70)), None, None);
 
         // the bar is on its way out and halfway down the screen
         {
@@ -367,7 +451,12 @@ mod tests {
         }
 
         // a fresh change pulls it back in from the bottom rather than resuming mid drop
-        assert!(update(Some(audio(60, false)), Some(brightness(70))));
+        assert!(update(
+            Some(audio(60, false)),
+            Some(brightness(70)),
+            None,
+            None
+        ));
 
         let shown = state().lock().unwrap().shown.unwrap();
 
@@ -377,10 +466,15 @@ mod tests {
 
     #[test]
     fn a_new_brightness_opens_the_display_on_brightness() {
-        reset();
+        let _serial = reset();
 
-        update(Some(audio(40, false)), Some(brightness(70)));
-        assert!(update(Some(audio(40, false)), Some(brightness(80))));
+        update(Some(audio(40, false)), Some(brightness(70)), None, None);
+        assert!(update(
+            Some(audio(40, false)),
+            Some(brightness(80)),
+            None,
+            None
+        ));
 
         let shown = state().lock().unwrap().shown.expect("the display opens");
 
@@ -390,11 +484,11 @@ mod tests {
 
     #[test]
     fn mute_is_carried_onto_the_display() {
-        reset();
+        let _serial = reset();
 
-        update(Some(audio(30, false)), None);
+        update(Some(audio(30, false)), None, None, None);
 
-        assert!(update(Some(audio(30, true)), None));
+        assert!(update(Some(audio(30, true)), None, None, None));
 
         let shown = state().lock().unwrap().shown.expect("the display opens");
 
@@ -403,25 +497,56 @@ mod tests {
 
     #[test]
     fn an_unchanged_reading_leaves_the_display_alone() {
-        reset();
+        let _serial = reset();
 
-        update(Some(audio(40, false)), Some(brightness(70)));
+        update(Some(audio(40, false)), Some(brightness(70)), None, None);
 
-        assert!(!update(Some(audio(40, false)), Some(brightness(70))));
+        assert!(!update(
+            Some(audio(40, false)),
+            Some(brightness(70)),
+            None,
+            None
+        ));
     }
 
     #[test]
     fn the_newest_change_takes_over_the_display() {
-        reset();
+        let _serial = reset();
 
-        update(Some(audio(40, false)), Some(brightness(50)));
+        update(Some(audio(40, false)), Some(brightness(50)), None, None);
 
         // volume changes, then brightness: the newest one is what shows
-        update(Some(audio(60, false)), Some(brightness(50)));
-        update(Some(audio(60, false)), Some(brightness(55)));
+        update(Some(audio(60, false)), Some(brightness(50)), None, None);
+        update(Some(audio(60, false)), Some(brightness(55)), None, None);
 
         let shown = state().lock().unwrap().shown.expect("the display opens");
 
         assert_eq!(shown.kind, Kind::Brightness);
+    }
+
+    #[test]
+    fn microphone_mute_changes_open_the_circular_osd_state() {
+        let _serial = reset();
+
+        assert!(!update(None, None, Some(microphone(false)), None));
+        assert!(update(None, None, Some(microphone(true)), None));
+
+        let shown = state().lock().unwrap().shown.expect("the display opens");
+
+        assert_eq!(shown.kind, Kind::Microphone);
+        assert!(shown.muted);
+    }
+
+    #[test]
+    fn keyboard_backlight_changes_open_the_level_osd() {
+        let _serial = reset();
+
+        assert!(!update(None, None, None, Some(keyboard_brightness(0))));
+        assert!(update(None, None, None, Some(keyboard_brightness(50))));
+
+        let shown = state().lock().unwrap().shown.expect("the display opens");
+
+        assert_eq!(shown.kind, Kind::KeyboardBrightness);
+        assert_eq!(shown.percent, 50);
     }
 }

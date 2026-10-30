@@ -4,8 +4,8 @@ use std::time::Duration;
 
 use aether::{
     Align, Animation, Canvas, Color, Column, Cursor, Easing, Horizontal, InputArea, Key, Keyboard,
-    Layer, LayerWindow, Padding, Parent, Path, Rectangle, Row, Shape, Stack, Start, Text, TextInput,
-    Vertical, Weight, Widget, Zone, children,
+    Layer, LayerWindow, Padding, Parent, Path, Rectangle, Row, Shape, Stack, Start, Text,
+    TextInput, Vertical, Weight, Widget, Zone, children,
 };
 use aether_services::clipboard::{self, ClipboardEntry};
 
@@ -89,14 +89,18 @@ pub fn start() {
     runtime().spawn(async {
         let mut ticker = tokio::time::interval(Duration::from_millis(700));
         let mut last_text: Option<String> = None;
+        let mut last_image: Option<Vec<u8>> = None;
         let mut last_error: Option<String> = None;
         loop {
             ticker.tick().await;
-            let result = tokio::task::spawn_blocking(clipboard::read_text).await;
-            let text = match result {
-                Ok(Ok(text)) => {
+            let result = tokio::task::spawn_blocking(|| {
+                Ok::<_, std::io::Error>((clipboard::read_text()?, clipboard::read_image()?))
+            })
+            .await;
+            let (text, image) = match result {
+                Ok(Ok(content)) => {
                     last_error = None;
-                    text
+                    content
                 }
                 Ok(Err(error)) => {
                     let message = error.to_string();
@@ -116,14 +120,11 @@ pub fn start() {
                 }
             };
 
-            if text == last_text {
+            if text == last_text && image == last_image {
                 continue;
             }
             last_text = text.clone();
-
-            let Some(text) = text else {
-                continue;
-            };
+            last_image = image.clone();
 
             let mut history = match entries().write() {
                 Ok(history) => history,
@@ -132,7 +133,24 @@ pub fn start() {
                     continue;
                 }
             };
-            if clipboard::record_text(&mut history, text, clipboard::history_config().max_entries) {
+            let recorded = if let Some(text) = text {
+                clipboard::record_text(&mut history, text, clipboard::history_config().max_entries)
+            } else if let Some(image) = image {
+                match clipboard::record_image(
+                    &mut history,
+                    &image,
+                    clipboard::history_config().max_entries,
+                ) {
+                    Ok(recorded) => recorded,
+                    Err(error) => {
+                        eprintln!("aether-panel: could not store clipboard image: {error}");
+                        false
+                    }
+                }
+            } else {
+                false
+            };
+            if recorded {
                 if let Err(error) = clipboard::save_history(&history) {
                     eprintln!("aether-panel: could not save clipboard history: {error}");
                 }
@@ -200,7 +218,15 @@ fn selected_entry() -> Option<ClipboardEntry> {
 
 fn copy_entry(entry: ClipboardEntry) {
     runtime().spawn(async move {
-        match tokio::task::spawn_blocking(move || clipboard::copy_text(&entry.text)).await {
+        let result = tokio::task::spawn_blocking(move || {
+            if let Some(path) = entry.image_path.as_deref() {
+                clipboard::copy_image(path)
+            } else {
+                clipboard::copy_text(&entry.text)
+            }
+        })
+        .await;
+        match result {
             Ok(Ok(())) => close(),
             Ok(Err(error)) => eprintln!("aether-panel: could not copy clipboard entry: {error}"),
             Err(error) => eprintln!("aether-panel: clipboard copy task failed: {error}"),
@@ -465,6 +491,7 @@ fn entry_row(entry: ClipboardEntry, selected: bool) -> Rectangle {
     let theme = theme();
     let preview = entry.text.split_whitespace().collect::<Vec<_>>().join(" ");
     let preview: String = preview.chars().take(160).collect();
+    let is_image = entry.image_path.is_some();
     let is_pinned = entry.pinned;
     let copy_on_click = entry.clone();
 
@@ -520,11 +547,17 @@ fn entry_row(entry: ClipboardEntry, selected: bool) -> Rectangle {
                 .width(Parent)
                 .gap(1.0)
                 .align(Align::Start),
-                Text::new(if is_pinned { "PIN" } else { "" })
-                    .font("Maple Mono")
-                    .size(9.0)
-                    .weight(Weight::SemiBold)
-                    .color(theme.text_muted),
+                Text::new(if is_image {
+                    "IMAGE"
+                } else if is_pinned {
+                    "PIN"
+                } else {
+                    ""
+                })
+                .font("Maple Mono")
+                .size(9.0)
+                .weight(Weight::SemiBold)
+                .color(theme.text_muted),
             ])
             .width(Parent)
             .height(ROW_HEIGHT)

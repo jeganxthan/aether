@@ -1,5 +1,5 @@
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
-use std::sync::{OnceLock, RwLock};
+use std::sync::{Mutex, OnceLock, RwLock};
 use std::time::Duration;
 
 use aether::{
@@ -9,7 +9,7 @@ use aether::{
 };
 
 use crate::panel::top::PANEL_HEIGHT;
-use crate::services::{runtime::runtime, wifi};
+use crate::services::{display, runtime::runtime, wifi};
 use crate::theme::theme;
 
 const WIDTH: f32 = 192.0;
@@ -32,6 +32,31 @@ static BLUETOOTH: OnceLock<RwLock<Option<bool>>> = OnceLock::new();
 static BLUETOOTH_WATCHER: OnceLock<()> = OnceLock::new();
 static LEVELS: OnceLock<RwLock<Levels>> = OnceLock::new();
 static LEVEL_WATCHER: OnceLock<()> = OnceLock::new();
+static TARGET_MONITOR: OnceLock<Mutex<Option<String>>> = OnceLock::new();
+
+fn target_monitor() -> &'static Mutex<Option<String>> {
+    TARGET_MONITOR.get_or_init(|| Mutex::new(None))
+}
+
+fn is_target_monitor(monitor: &aether::Monitor) -> bool {
+    let target = target_monitor()
+        .lock()
+        .ok()
+        .and_then(|target| target.clone());
+
+    target.as_deref().map_or_else(
+        || {
+            display::is_primary(
+                &monitor.name,
+                monitor.x,
+                monitor.y,
+                &monitor.outputs,
+                monitor.origin_output.as_deref(),
+            )
+        },
+        |target| target == monitor.name,
+    )
+}
 
 #[derive(Clone, Copy, Default, PartialEq, Eq)]
 struct Levels {
@@ -41,6 +66,45 @@ struct Levels {
 
 pub fn set_hovered(hovered: bool) {
     super::popup_motion::set_hovered(hovered, &HOVERED, &HOVER_GENERATION);
+}
+
+pub fn open_settings_on_hover_for_monitor(monitor: String) {
+    open_for_monitor(true, Some(monitor));
+}
+
+pub fn toggle_settings_for_monitor(monitor: String) {
+    let same_monitor = target_monitor()
+        .lock()
+        .map(|target| target.as_deref() == Some(monitor.as_str()))
+        .unwrap_or(false);
+
+    if is_open() && same_monitor {
+        close();
+    } else {
+        open_for_monitor(false, Some(monitor));
+    }
+}
+
+fn is_open() -> bool {
+    HOVERED.load(Ordering::Relaxed)
+}
+
+fn open_for_monitor(_close_on_unhover: bool, monitor: Option<String>) {
+    HOVER_GENERATION.fetch_add(1, Ordering::Relaxed);
+    HOVERED.store(true, Ordering::Relaxed);
+    if let Ok(mut target) = target_monitor().lock() {
+        *target = monitor;
+    }
+    aether::refresh();
+}
+
+fn close() {
+    HOVER_GENERATION.fetch_add(1, Ordering::Relaxed);
+    HOVERED.store(false, Ordering::Relaxed);
+    if let Ok(mut target) = target_monitor().lock() {
+        *target = None;
+    }
+    aether::refresh();
 }
 
 fn progress() -> f32 {
@@ -422,7 +486,27 @@ fn controls() -> Column {
     .align(Align::Center)
 }
 
-pub fn settings_hint() -> LayerWindow {
+pub fn settings_hint(monitor: &aether::Monitor) -> LayerWindow {
+    if !is_target_monitor(monitor) {
+        return LayerWindow::new()
+            .width(WIDTH)
+            .height(HEIGHT)
+            .anchor_vertical(Vertical::Top)
+            .anchor_horizontal(Horizontal::Right)
+            .layer(Layer::Top)
+            .space(Zone::Ignore)
+            .namespace("aether-settings-hint")
+            .visible(is_target_monitor(monitor))
+            .margin(Margin {
+                top: PANEL_HEIGHT as i32,
+                right: 0,
+                bottom: 0,
+                left: 0,
+            })
+            .click_through()
+            .child(blank());
+    }
+
     let progress = progress();
     let visible = HOVERED.load(Ordering::Relaxed);
     let window = LayerWindow::new()

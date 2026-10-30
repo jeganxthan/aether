@@ -12,6 +12,7 @@ use aether::{
 use crate::panel::svg::recolor;
 use crate::panel::top::PANEL_HEIGHT;
 use crate::services::applications::{Application, ApplicationService};
+use crate::services::display;
 use crate::theme::theme;
 
 // ------------------------------------------------------------
@@ -77,6 +78,7 @@ static INDEX_LOADING: AtomicBool = AtomicBool::new(false);
 static INDEX_LOADED: AtomicBool = AtomicBool::new(false);
 static SEARCH_QUERY: OnceLock<Mutex<String>> = OnceLock::new();
 static APPLICATIONS: OnceLock<Mutex<ApplicationService>> = OnceLock::new();
+static TARGET_MONITOR: OnceLock<Mutex<Option<String>>> = OnceLock::new();
 
 fn search_state() -> &'static Mutex<String> {
     SEARCH_QUERY.get_or_init(|| Mutex::new(String::new()))
@@ -84,6 +86,10 @@ fn search_state() -> &'static Mutex<String> {
 
 fn application_service() -> &'static Mutex<ApplicationService> {
     APPLICATIONS.get_or_init(|| Mutex::new(ApplicationService::default()))
+}
+
+fn target_monitor() -> &'static Mutex<Option<String>> {
+    TARGET_MONITOR.get_or_init(|| Mutex::new(None))
 }
 
 fn query() -> String {
@@ -154,17 +160,33 @@ pub fn preload() {
 }
 
 pub fn open_launcher() {
-    open(false);
+    open(false, None);
 }
 
-pub fn open_launcher_on_hover() {
-    open(true);
+pub fn open_launcher_on_hover_for_monitor(monitor: String) {
+    open(true, Some(monitor));
 }
 
-fn open(close_on_unhover: bool) {
+pub fn toggle_for_monitor(monitor: String) {
+    let same_monitor = target_monitor()
+        .lock()
+        .map(|target| target.as_deref() == Some(monitor.as_str()))
+        .unwrap_or(false);
+
+    if is_open() && same_monitor {
+        close();
+    } else {
+        open(false, Some(monitor));
+    }
+}
+
+fn open(close_on_unhover: bool, monitor: Option<String>) {
     CLOSE_ON_UNHOVER.store(close_on_unhover, Ordering::Relaxed);
     HOVER_GENERATION.fetch_add(1, Ordering::Relaxed);
     HOVERED.store(true, Ordering::Relaxed);
+    if let Ok(mut target) = target_monitor().lock() {
+        *target = monitor;
+    }
     preload();
     if let Ok(mut value) = search_state().lock() {
         value.clear();
@@ -188,9 +210,32 @@ pub fn close() {
     CLOSE_ON_UNHOVER.store(false, Ordering::Relaxed);
     HOVER_GENERATION.fetch_add(1, Ordering::Relaxed);
     HOVERED.store(false, Ordering::Relaxed);
+    if let Ok(mut target) = target_monitor().lock() {
+        *target = None;
+    }
     if OPEN.swap(false, Ordering::Relaxed) {
         aether::refresh();
     }
+}
+
+fn is_target_monitor(monitor: &aether::Monitor) -> bool {
+    let target = target_monitor()
+        .lock()
+        .ok()
+        .and_then(|target| target.clone());
+
+    target.as_deref().map_or_else(
+        || {
+            display::is_primary(
+                &monitor.name,
+                monitor.x,
+                monitor.y,
+                &monitor.outputs,
+                monitor.origin_output.as_deref(),
+            )
+        },
+        |target| target == monitor.name,
+    )
 }
 
 // ------------------------------------------------------------
@@ -296,7 +341,7 @@ fn launch_selected() {
     }
 }
 
-pub fn launcher() -> LayerWindow {
+pub fn launcher(monitor: &aether::Monitor) -> LayerWindow {
     let is_open = is_open();
     let q = query();
     let has_query = !q.trim().is_empty();
@@ -327,6 +372,7 @@ pub fn launcher() -> LayerWindow {
         .anchor_horizontal(Horizontal::Left)
         .layer(Layer::Overlay)
         .space(Zone::Ignore)
+        .visible(is_open && is_target_monitor(monitor))
         .namespace("aether-launcher")
         .keyboard(if is_open {
             Keyboard::Exclusive

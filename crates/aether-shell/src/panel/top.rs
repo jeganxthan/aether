@@ -4,9 +4,12 @@ use aether::{
 };
 
 use crate::panel::component::battery_popup;
+use crate::panel::component::bluetooth_popup;
 use crate::panel::component::launcher;
+use crate::panel::component::notification_menu;
 use crate::panel::component::player_popup;
-use crate::panel::component::wifi_popup::{hovered, open, set_hovered, toggle_open};
+use crate::panel::component::settings_popup;
+use crate::panel::component::wifi_popup;
 use crate::panel::svg::battery_svg::BatteryIcon;
 use crate::panel::svg::distro_svg::distro_icon;
 use crate::panel::svg::player_svg::player_brand_icon;
@@ -46,6 +49,9 @@ const EDGE_INSET: f32 = 12.0;
 pub const NOTIFICATION_EDGE_RIGHT: f32 = EDGE_INSET + PLAYER_HIT_WIDTH + NOTIFICATION_SETTINGS_GAP;
 
 pub fn panel(monitor: &aether::Monitor) -> LayerWindow {
+    let launcher_monitor = monitor.name.clone();
+    let hover_monitor = launcher_monitor.clone();
+    let click_monitor = launcher_monitor;
     display::watch_primary_display();
     let theme = theme();
 
@@ -79,6 +85,8 @@ pub fn panel(monitor: &aether::Monitor) -> LayerWindow {
 
     // Keep the active player's brand icon visible in the panel.
     if let Some(p) = active_player {
+        let hover_monitor_player = monitor.name.clone();
+        let click_monitor_player = monitor.name.clone();
         right_items.push(Box::new(
             Rectangle::new()
                 .width(PLAYER_HIT_WIDTH)
@@ -86,8 +94,16 @@ pub fn panel(monitor: &aether::Monitor) -> LayerWindow {
                 .fill(Color::TRANSPARENT)
                 .cursor(Cursor::Pointer)
                 .align_child(Align::Center, Align::Center)
-                .on_hover(player_popup::set_hovered)
-                .on_click(|_| player_popup::toggle_menu())
+                .on_hover(move |hovered| {
+                    if hovered {
+                        player_popup::open_player_on_hover_for_monitor(hover_monitor_player.clone());
+                    } else {
+                        player_popup::set_hovered(false);
+                    }
+                })
+                .on_click(move |_| {
+                    player_popup::toggle_player_for_monitor(click_monitor_player.clone());
+                })
                 .child(
                     Rectangle::new()
                         .width(ICON_SIZE)
@@ -100,7 +116,9 @@ pub fn panel(monitor: &aether::Monitor) -> LayerWindow {
         ));
     }
     // Wifi icon
-    let wifi_active = hovered() || open();
+    let wifi_active = wifi_popup::hovered() || wifi_popup::open();
+    let hover_monitor_wifi = monitor.name.clone();
+    let click_monitor_wifi = monitor.name.clone();
     right_items.push(Box::new(
         Rectangle::new()
             .width(WIFI_HIT_WIDTH)
@@ -112,9 +130,15 @@ pub fn panel(monitor: &aether::Monitor) -> LayerWindow {
             })
             .cursor(Cursor::Pointer)
             .align_child(Align::Center, Align::Center)
-            .on_hover(set_hovered)
-            .on_click(|_| {
-                toggle_open();
+            .on_hover(move |hovered| {
+                if hovered {
+                    wifi_popup::open_wifi_on_hover_for_monitor(hover_monitor_wifi.clone());
+                } else {
+                    wifi_popup::set_hovered(false);
+                }
+            })
+            .on_click(move |_| {
+                wifi_popup::toggle_wifi_for_monitor(click_monitor_wifi.clone());
                 aether::refresh();
             })
             .child(
@@ -144,6 +168,8 @@ pub fn panel(monitor: &aether::Monitor) -> LayerWindow {
         std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
             .join("../../assets/icons/panel/bluetooth-off.svg")
     };
+    let hover_monitor_bt = monitor.name.clone();
+    let click_monitor_bt = monitor.name.clone();
     right_items.push(Box::new(
         Rectangle::new()
             .width(PLAYER_HIT_WIDTH)
@@ -159,8 +185,16 @@ pub fn panel(monitor: &aether::Monitor) -> LayerWindow {
             )
             .cursor(Cursor::Pointer)
             .align_child(Align::Center, Align::Center)
-            .on_hover(crate::panel::component::bluetooth_popup::set_hovered)
-            .on_click(|_| crate::panel::component::bluetooth_menu::toggle_open())
+            .on_hover(move |hovered| {
+                if hovered {
+                    bluetooth_popup::open_bluetooth_on_hover_for_monitor(hover_monitor_bt.clone());
+                } else {
+                    bluetooth_popup::set_hovered(false);
+                }
+            })
+            .on_click(move |_| {
+                bluetooth_popup::toggle_bluetooth_for_monitor(click_monitor_bt.clone());
+            })
             .child(Rectangle::new().width(ICON_SIZE).height(ICON_SIZE).fill(
                 crate::panel::svg::recolor::ink_image(bluetooth_icon, theme.icon),
             )),
@@ -170,38 +204,50 @@ pub fn panel(monitor: &aether::Monitor) -> LayerWindow {
     ));
     // battery reading and icon
     let battery_item = match battery_icon {
-        Some((icon, charging, percentage)) => Rectangle::new()
-            .width(50.0)
-            .height(Parent)
-            .fill(if battery_popup::hovered() {
-                aether::Color::BLACK
-            } else {
-                aether::Color::TRANSPARENT
-            })
-            .cursor(Cursor::Pointer)
-            .align_child(Align::End, Align::Center)
-            .on_hover(battery_popup::set_hovered)
-            .on_click(|_| crate::panel::component::battery_menu::toggle_open())
-            .child(
-                Row::new(children![
-                    Text::new(format!("{percentage}%"))
-                        .font("Maple Mono")
-                        .color(theme.bar_text)
-                        .size(12.0),
-                    Rectangle::new()
-                        .width(PERCENT_GAP)
-                        .height(1.0)
-                        .fill(Color::TRANSPARENT),
-                    Rectangle::new()
-                        .width(BATTERY_ICON_SIZE)
-                        .height(BATTERY_ICON_SIZE)
-                        .fill(icon.image(charging, false)),
-                ])
-                .width(Parent)
+        Some((icon, charging, percentage)) => {
+            let hover_monitor_bat = monitor.name.clone();
+            let click_monitor_bat = monitor.name.clone();
+            Rectangle::new()
+                .width(50.0)
                 .height(Parent)
-                .align(Align::Center)
-                .justify(End),
-            ),
+                .fill(if battery_popup::hovered() {
+                    aether::Color::BLACK
+                } else {
+                    aether::Color::TRANSPARENT
+                })
+                .cursor(Cursor::Pointer)
+                .align_child(Align::End, Align::Center)
+                .on_hover(move |hovered| {
+                    if hovered {
+                        battery_popup::open_battery_on_hover_for_monitor(hover_monitor_bat.clone());
+                    } else {
+                        battery_popup::set_hovered(false);
+                    }
+                })
+                .on_click(move |_| {
+                    battery_popup::toggle_battery_for_monitor(click_monitor_bat.clone());
+                })
+                .child(
+                    Row::new(children![
+                        Text::new(format!("{percentage}%"))
+                            .font("Maple Mono")
+                            .color(theme.bar_text)
+                            .size(12.0),
+                        Rectangle::new()
+                            .width(PERCENT_GAP)
+                            .height(1.0)
+                            .fill(Color::TRANSPARENT),
+                        Rectangle::new()
+                            .width(BATTERY_ICON_SIZE)
+                            .height(BATTERY_ICON_SIZE)
+                            .fill(icon.image(charging, false)),
+                    ])
+                    .width(Parent)
+                    .height(Parent)
+                    .align(Align::Center)
+                    .justify(End),
+                )
+        }
         None => Rectangle::new()
             .width(50.0)
             .height(Parent)
@@ -221,6 +267,8 @@ pub fn panel(monitor: &aether::Monitor) -> LayerWindow {
             "../../assets/icons/notification/bell.svg"
         },
     );
+    let hover_monitor_notif = monitor.name.clone();
+    let click_monitor_notif = monitor.name.clone();
     right_items.push(Box::new(
         Rectangle::new()
             .width(NOTIFICATION_HIT_WIDTH)
@@ -232,8 +280,16 @@ pub fn panel(monitor: &aether::Monitor) -> LayerWindow {
             })
             .cursor(Cursor::Pointer)
             .align_child(Align::Center, Align::Center)
-            .on_hover(crate::panel::component::notification_menu::set_hovered)
-            .on_click(|_| crate::panel::component::notification_menu::toggle_open())
+            .on_hover(move |hovered| {
+                if hovered {
+                    notification_menu::open_notification_on_hover_for_monitor(hover_monitor_notif.clone());
+                } else {
+                    notification_menu::set_hovered(false);
+                }
+            })
+            .on_click(move |_| {
+                notification_menu::toggle_notification_for_monitor(click_monitor_notif.clone());
+            })
             .child(Rectangle::new().width(ICON_SIZE).height(ICON_SIZE).fill(
                 crate::panel::svg::recolor::ink_image(notification_icon, theme.icon),
             )),
@@ -247,12 +303,23 @@ pub fn panel(monitor: &aether::Monitor) -> LayerWindow {
 
     let settings_icon = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
         .join("../../assets/icons/panel/settings.svg");
+    let hover_monitor_settings = monitor.name.clone();
+    let click_monitor_settings = monitor.name.clone();
     right_items.push(Box::new(
         Rectangle::new()
             .width(PLAYER_HIT_WIDTH)
             .height(Parent)
             .fill(Color::TRANSPARENT)
-            .on_hover(crate::panel::component::settings_popup::set_hovered)
+            .on_hover(move |hovered| {
+                if hovered {
+                    settings_popup::open_settings_on_hover_for_monitor(hover_monitor_settings.clone());
+                } else {
+                    settings_popup::set_hovered(false);
+                }
+            })
+            .on_click(move |_| {
+                settings_popup::toggle_settings_for_monitor(click_monitor_settings.clone());
+            })
             .align_child(Align::Center, Align::Center)
             .child(Rectangle::new().width(ICON_SIZE).height(ICON_SIZE).fill(
                 crate::panel::svg::recolor::ink_image(settings_icon, theme.icon),
@@ -270,12 +337,14 @@ pub fn panel(monitor: &aether::Monitor) -> LayerWindow {
             })
             .cursor(Cursor::Pointer)
             .align_child(Align::Center, Align::Center)
-            .on_hover(|hovered| {
+            .on_hover(move |hovered| {
                 if hovered {
-                    launcher::open_launcher_on_hover();
+                    launcher::open_launcher_on_hover_for_monitor(hover_monitor.clone());
+                } else {
+                    launcher::set_hovered(false);
                 }
             })
-            .on_click(|_| launcher::toggle())
+            .on_click(move |_| launcher::toggle_for_monitor(click_monitor.clone()))
             .child(distro_icon()),
     )];
     LayerWindow::new()

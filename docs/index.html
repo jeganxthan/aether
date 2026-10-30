@@ -1,181 +1,1299 @@
 <!doctype html>
 <html lang="en">
-  <head>
-    <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-    <meta name="theme-color" content="#0b0c10">
-    <meta name="description" content="Aether is a Rust-powered Wayland desktop built around labwc: a thoughtful shell, useful system controls, and a focused Linux experience.">
-    <title>Aether — a Rust-powered Wayland desktop</title>
-    <link rel="icon" type="image/png" href="aether.png">
-    <link rel="stylesheet" href="style.css?v=2">
-  </head>
-  <body id="top">
-    <header class="site-header">
+
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#090909">
+  <meta name="description"
+    content="Aether is an experimental Linux desktop environment project exploring a Rust-powered shell, Wayland-native widgets, system services, and a focused desktop experience.">
+  <title>Aether — Linux, shaped around your workflow</title>
+  <link rel="icon" type="image/png" href="aether.png">
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg: #090909;
+      --surface: #101010;
+      --surface-raised: #151515;
+      --border: rgba(255, 255, 255, .09);
+      --text: #f3f3f3;
+      --muted: #999;
+      --subtle: #686868;
+      --accent: #c8b8ff;
+      --radius: 18px;
+      --content: 1160px;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    html {
+      scroll-behavior: smooth;
+      scroll-padding-top: 90px;
+    }
+
+    body {
+      margin: 0;
+      background:
+        radial-gradient(ellipse at 76% 0%, rgba(139, 115, 205, .10), transparent 35rem),
+        var(--bg);
+      color: var(--text);
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system,
+        BlinkMacSystemFont, "Segoe UI", sans-serif;
+      line-height: 1.6;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    a {
+      color: inherit;
+      text-decoration: none;
+    }
+
+    button,
+    a {
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    button {
+      font: inherit;
+    }
+
+    img {
+      display: block;
+      max-width: 100%;
+    }
+
+    .container {
+      width: min(var(--content), calc(100% - 48px));
+      margin-inline: auto;
+    }
+
+    .site-header {
+      position: sticky;
+      top: 0;
+      z-index: 10;
+      background: rgba(9, 9, 9, .86);
+      border-bottom: 1px solid var(--border);
+      backdrop-filter: blur(18px);
+    }
+
+    .header-inner {
+      min-height: 72px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 24px;
+    }
+
+    .brand {
+      display: inline-flex;
+      align-items: center;
+      gap: 11px;
+      font-size: 13px;
+      font-weight: 750;
+      letter-spacing: .19em;
+    }
+
+    .brand-mark {
+      width: 34px;
+      height: 34px;
+      display: grid;
+      place-items: center;
+      border: 1px solid rgba(255, 255, 255, .18);
+      border-radius: 11px;
+      background: linear-gradient(145deg, #252525, #101010);
+      color: var(--accent);
+      font-size: 19px;
+      letter-spacing: 0;
+    }
+
+    .nav-links {
+      display: flex;
+      align-items: center;
+      gap: 30px;
+      color: #aaa;
+      font-size: 13px;
+    }
+
+    .nav-links a,
+    .footer-link {
+      transition: color .2s ease;
+    }
+
+    .nav-links a:hover,
+    .footer-link:hover {
+      color: white;
+    }
+
+    .header-cta {
+      padding: 9px 14px;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      font-size: 12px;
+      transition: background .2s ease;
+    }
+
+    .header-cta:hover {
+      background: #1c1c1c;
+    }
+
+    .hero {
+      padding: 94px 0 74px;
+    }
+
+    .hero-grid {
+      display: grid;
+      grid-template-columns: .9fr 1.1fr;
+      align-items: center;
+      gap: 55px;
+    }
+
+    .eyebrow {
+      display: flex;
+      align-items: center;
+      gap: 9px;
+      margin: 0 0 22px;
+      color: #aaa;
+      font-size: 10px;
+      font-weight: 650;
+      letter-spacing: .17em;
+      text-transform: uppercase;
+    }
+
+    .eyebrow-dot {
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: var(--accent);
+      box-shadow: 0 0 15px rgba(200, 184, 255, .5);
+    }
+
+    h1,
+    h2,
+    h3,
+    p {
+      margin-top: 0;
+    }
+
+    h1 {
+      max-width: 600px;
+      margin-bottom: 24px;
+      font-size: clamp(42px, 5.2vw, 70px);
+      font-weight: 570;
+      line-height: 1.03;
+      letter-spacing: -.065em;
+    }
+
+    .gradient-text {
+      color: #b9b9b9;
+      background: linear-gradient(100deg, #fff 0%, #c8b8ff 55%, #858585 100%);
+      background-clip: text;
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+
+    .hero-description {
+      max-width: 490px;
+      margin-bottom: 28px;
+      color: var(--muted);
+      font-size: 15px;
+      line-height: 1.9;
+    }
+
+    .actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 11px;
+    }
+
+    .button {
+      display: inline-flex;
+      min-height: 44px;
+      align-items: center;
+      justify-content: center;
+      gap: 12px;
+      padding: 0 17px;
+      border: 1px solid var(--border);
+      border-radius: 11px;
+      font-size: 12px;
+      font-weight: 600;
+      transition: transform .2s ease, background .2s ease;
+    }
+
+    .button:hover {
+      transform: translateY(-2px);
+    }
+
+    .button-primary {
+      background: #f0f0f0;
+      border-color: #f0f0f0;
+      color: #111;
+    }
+
+    .button-primary:hover {
+      background: #d7d0e8;
+    }
+
+    .button-secondary {
+      background: rgba(255, 255, 255, .025);
+    }
+
+    .button-secondary:hover {
+      background: #191919;
+    }
+
+    .hero-meta {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 17px;
+      margin-top: 27px;
+      color: var(--subtle);
+      font-size: 11px;
+    }
+
+    .hero-meta span {
+      display: inline-flex;
+      align-items: center;
+      gap: 7px;
+    }
+
+    .hero-meta i {
+      width: 5px;
+      height: 5px;
+      border-radius: 50%;
+      background: #777;
+    }
+
+    /* Abstract desktop concept; not a screenshot of a finished desktop. */
+    .desktop-stage {
+      position: relative;
+      min-width: 0;
+      padding: 28px 0 34px 24px;
+    }
+
+    .stage-glow {
+      position: absolute;
+      inset: 7% 2% 9% 13%;
+      background: rgba(151, 128, 218, .11);
+      filter: blur(65px);
+      pointer-events: none;
+    }
+
+    .desktop-frame {
+      position: relative;
+      overflow: hidden;
+      aspect-ratio: 1.43;
+      border: 1px solid rgba(255, 255, 255, .17);
+      border-radius: 17px;
+      background:
+        radial-gradient(ellipse at 50% 48%, rgba(120, 102, 171, .17), transparent 45%),
+        linear-gradient(145deg, #19191d, #0a0a0b 75%);
+      box-shadow: 0 35px 100px rgba(0, 0, 0, .6);
+    }
+
+    .desktop-frame::before {
+      position: absolute;
+      inset: 0;
+      background-image:
+        linear-gradient(rgba(255, 255, 255, .025) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(255, 255, 255, .025) 1px, transparent 1px);
+      background-size: 34px 34px;
+      content: "";
+      mask-image: linear-gradient(to bottom, black, transparent 85%);
+    }
+
+    .desktop-orbit {
+      position: absolute;
+      top: 16%;
+      left: 25%;
+      width: 53%;
+      aspect-ratio: 1;
+      border: 1px solid rgba(200, 184, 255, .13);
+      border-radius: 50%;
+      transform: rotate(-25deg) scaleY(.55);
+    }
+
+    .desktop-orbit::after {
+      position: absolute;
+      inset: 13%;
+      border: 1px solid rgba(255, 255, 255, .09);
+      border-radius: 50%;
+      content: "";
+    }
+
+    .desktop-center {
+      position: absolute;
+      inset: 0;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding-bottom: 18px;
+      text-align: center;
+    }
+
+    .desktop-symbol {
+      display: grid;
+      width: 68px;
+      height: 68px;
+      place-items: center;
+      margin-bottom: 14px;
+      border: 1px solid rgba(255, 255, 255, .15);
+      border-radius: 23px;
+      background: linear-gradient(145deg, #28252f, #111);
+      color: var(--accent);
+      font-size: 34px;
+      box-shadow: 0 12px 55px rgba(0, 0, 0, .35);
+    }
+
+    .desktop-wordmark {
+      font-size: 15px;
+      font-weight: 700;
+      letter-spacing: .28em;
+    }
+
+    .desktop-caption {
+      margin-top: 5px;
+      color: #777;
+      font-size: 10px;
+    }
+
+    .mock-island {
+      position: absolute;
+      top: 16px;
+      left: 50%;
+      display: flex;
+      align-items: center;
+      gap: 11px;
+      padding: 9px 14px;
+      border: 1px solid rgba(255, 255, 255, .12);
+      border-radius: 100px;
+      background: rgba(8, 8, 8, .92);
+      box-shadow: 0 7px 25px rgba(0, 0, 0, .3);
+      transform: translateX(-50%);
+    }
+
+    .island-mark {
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: var(--accent);
+    }
+
+    .island-label {
+      color: #ddd;
+      font-size: 9px;
+      letter-spacing: .04em;
+    }
+
+    .mock-panel {
+      position: absolute;
+      right: 0;
+      bottom: 0;
+      left: 0;
+      display: flex;
+      height: 42px;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 15px;
+      border-top: 1px solid rgba(255, 255, 255, .09);
+      background: rgba(8, 8, 8, .83);
+      color: #aaa;
+      font-size: 10px;
+      backdrop-filter: blur(18px);
+    }
+
+    .panel-brand {
+      color: #eee;
+      font-weight: 650;
+    }
+
+    .panel-brand span {
+      color: var(--accent);
+    }
+
+    .panel-right {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .panel-time {
+      color: #eee;
+      font-variant-numeric: tabular-nums;
+    }
+
+    .stage-caption {
+      position: absolute;
+      right: 0;
+      bottom: 0;
+      color: #696969;
+      font-size: 10px;
+    }
+
+    .principles {
+      border-top: 1px solid var(--border);
+      border-bottom: 1px solid var(--border);
+    }
+
+    .principles-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+    }
+
+    .principle {
+      display: flex;
+      align-items: center;
+      gap: 15px;
+      padding: 24px 15px;
+      border-right: 1px solid var(--border);
+    }
+
+    .principle:first-child {
+      padding-left: 0;
+    }
+
+    .principle:last-child {
+      border-right: 0;
+    }
+
+    .principle-number {
+      color: var(--accent);
+      font-size: 11px;
+    }
+
+    .principle-label {
+      color: #b8b8b8;
+      font-size: 12px;
+    }
+
+    .section {
+      padding: 105px 0;
+    }
+
+    .section-heading {
+      max-width: 700px;
+      margin-bottom: 44px;
+    }
+
+    .section h2,
+    .architecture h2,
+    .roadmap h2 {
+      margin-bottom: 0;
+      font-size: clamp(32px, 4vw, 48px);
+      font-weight: 550;
+      line-height: 1.12;
+      letter-spacing: -.05em;
+    }
+
+    .about-grid {
+      display: grid;
+      grid-template-columns: 1fr .8fr;
+      gap: 80px;
+    }
+
+    .about-copy p {
+      margin-bottom: 18px;
+      color: var(--muted);
+      font-size: 14px;
+      line-height: 1.95;
+    }
+
+    .about-copy strong {
+      color: #e9e9e9;
+      font-weight: 600;
+    }
+
+    .note {
+      padding-left: 15px;
+      border-left: 2px solid #8b7eac;
+      color: #858585 !important;
+      font-size: 12px !important;
+    }
+
+    .section-top {
+      display: flex;
+      align-items: end;
+      justify-content: space-between;
+      gap: 30px;
+      margin-bottom: 34px;
+    }
+
+    .section-top .eyebrow {
+      margin-bottom: 15px;
+    }
+
+    .section-summary {
+      max-width: 365px;
+      margin-bottom: 3px;
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.9;
+    }
+
+    .feature-grid {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 13px;
+    }
+
+    .feature-card {
+      min-height: 220px;
+      padding: 23px;
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      background: linear-gradient(145deg, rgba(255, 255, 255, .035), rgba(255, 255, 255, .012));
+      transition: border-color .2s ease, transform .2s ease;
+    }
+
+    .feature-card:hover {
+      transform: translateY(-3px);
+      border-color: rgba(200, 184, 255, .3);
+    }
+
+    .feature-icon {
+      display: grid;
+      width: 39px;
+      height: 39px;
+      place-items: center;
+      margin-bottom: 26px;
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      background: rgba(255, 255, 255, .035);
+      color: var(--accent);
+      font-size: 18px;
+    }
+
+    .feature-card h3 {
+      margin-bottom: 9px;
+      font-size: 15px;
+      font-weight: 600;
+      letter-spacing: -.02em;
+    }
+
+    .feature-card p {
+      margin-bottom: 22px;
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.9;
+    }
+
+    .feature-tag {
+      color: #737373;
+      font-size: 9px;
+      letter-spacing: .09em;
+    }
+
+    .architecture {
+      display: grid;
+      grid-template-columns: .8fr 1fr;
+      align-items: center;
+      gap: 80px;
+      padding: 68px;
+      border: 1px solid var(--border);
+      border-radius: 24px;
+      background:
+        radial-gradient(ellipse at 0% 100%, rgba(200, 184, 255, .07), transparent 55%),
+        #0e0e0e;
+    }
+
+    .architecture h2 {
+      margin-bottom: 20px;
+    }
+
+    .architecture-copy>p:not(.eyebrow) {
+      max-width: 380px;
+      margin-bottom: 23px;
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.9;
+    }
+
+    .text-link {
+      display: inline-flex;
+      align-items: center;
+      gap: 9px;
+      color: #ddd;
+      font-size: 12px;
+    }
+
+    .text-link:hover {
+      color: var(--accent);
+    }
+
+    .architecture-stack {
+      display: flex;
+      flex-direction: column;
+      gap: 9px;
+    }
+
+    .stack-row {
+      display: grid;
+      grid-template-columns: 35px 1fr auto;
+      align-items: center;
+      gap: 13px;
+      padding: 16px;
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      background: rgba(255, 255, 255, .025);
+    }
+
+    .stack-index {
+      color: #777;
+      font-size: 10px;
+    }
+
+    .stack-row b {
+      display: block;
+      font-size: 12px;
+      font-weight: 600;
+    }
+
+    .stack-row small {
+      display: block;
+      margin-top: 3px;
+      color: #858585;
+      font-size: 10px;
+    }
+
+    .brand-logo {
+      width: 23px;
+      height: 23px;
+      object-fit: contain;
+    }
+
+    .desktop-logo {
+      width: 100%;
+      height: 100%;
+      padding: 12px;
+      object-fit: contain;
+    }
+
+    .stack-row em {
+      color: #aaa;
+      font-size: 9px;
+      font-style: normal;
+      letter-spacing: .1em;
+    }
+
+    .roadmap {
+      padding: 105px 0;
+    }
+
+    .roadmap-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 14px;
+      margin-top: 35px;
+    }
+
+    .roadmap-item {
+      display: flex;
+      gap: 15px;
+      padding: 21px;
+      border: 1px solid var(--border);
+      border-radius: 15px;
+      background: rgba(255, 255, 255, .018);
+    }
+
+    .roadmap-marker {
+      flex: 0 0 9px;
+      width: 9px;
+      height: 9px;
+      margin-top: 6px;
+      border: 1px solid #777;
+      border-radius: 50%;
+    }
+
+    .roadmap-item h3 {
+      margin-bottom: 5px;
+      font-size: 13px;
+      font-weight: 600;
+    }
+
+    .roadmap-item p {
+      margin-bottom: 0;
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.8;
+    }
+
+    .project-cta {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 30px;
+      padding: 47px;
+      border: 1px solid var(--border);
+      border-radius: 22px;
+      background: linear-gradient(115deg, #151515, #0c0c0c 65%);
+    }
+
+    .project-cta h2 {
+      margin-bottom: 12px;
+      font-size: clamp(28px, 3.4vw, 40px);
+    }
+
+    .project-cta p {
+      max-width: 530px;
+      margin-bottom: 0;
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.8;
+    }
+
+    .site-footer {
+      margin-top: 85px;
+      border-top: 1px solid var(--border);
+    }
+
+    .footer-inner {
+      display: flex;
+      min-height: 92px;
+      align-items: center;
+      justify-content: space-between;
+      gap: 20px;
+    }
+
+    .footer-note {
+      margin: 0;
+      color: #737373;
+      font-size: 11px;
+    }
+
+    @media (max-width: 900px) {
+      .hero-grid {
+        grid-template-columns: 1fr;
+        gap: 35px;
+      }
+
+      .hero {
+        padding-top: 65px;
+      }
+
+      .desktop-stage {
+        max-width: 680px;
+        width: 100%;
+        margin-inline: auto;
+      }
+
+      .about-grid,
+      .architecture {
+        grid-template-columns: 1fr;
+        gap: 30px;
+      }
+
+      .architecture {
+        padding: 36px;
+      }
+
+      .section-top {
+        align-items: start;
+        flex-direction: column;
+        gap: 14px;
+      }
+
+      .section-summary {
+        max-width: 550px;
+      }
+    }
+
+    @media (max-width: 640px) {
+      .container {
+        width: min(100% - 32px, var(--content));
+      }
+
+      .header-inner {
+        min-height: 64px;
+      }
+
+      .nav-links {
+        display: none;
+      }
+
+      .hero {
+        padding: 55px 0;
+      }
+
+      .hero-meta {
+        gap: 11px;
+      }
+
+      .desktop-stage {
+        padding-left: 0;
+      }
+
+      .desktop-frame {
+        border-radius: 12px;
+      }
+
+      .desktop-symbol {
+        width: 52px;
+        height: 52px;
+        border-radius: 17px;
+        font-size: 27px;
+      }
+
+      .desktop-caption {
+        font-size: 8px;
+      }
+
+      .mock-panel {
+        height: 35px;
+        padding-inline: 10px;
+      }
+
+      .panel-right {
+        gap: 7px;
+      }
+
+      .stage-caption {
+        font-size: 9px;
+      }
+
+      .principles-grid {
+        grid-template-columns: 1fr;
+      }
+
+      .principle,
+      .principle:first-child {
+        padding: 16px 0;
+        border-right: 0;
+        border-bottom: 1px solid var(--border);
+      }
+
+      .principle:last-child {
+        border-bottom: 0;
+      }
+
+      .section,
+      .roadmap {
+        padding: 70px 0;
+      }
+
+      .feature-grid,
+      .roadmap-grid {
+        grid-template-columns: 1fr;
+      }
+
+      .feature-card {
+        min-height: auto;
+      }
+
+      .feature-icon {
+        margin-bottom: 20px;
+      }
+
+      .architecture {
+        padding: 24px 18px;
+        border-radius: 17px;
+      }
+
+      .stack-row {
+        padding: 13px 10px;
+        gap: 8px;
+      }
+
+      .stack-row em {
+        font-size: 8px;
+      }
+
+      .project-cta {
+        align-items: start;
+        flex-direction: column;
+        padding: 28px 22px;
+      }
+
+      .footer-inner {
+        flex-wrap: wrap;
+        padding-block: 22px;
+      }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+
+      *,
+      *::before,
+      *::after {
+        scroll-behavior: auto !important;
+        transition-duration: .01ms !important;
+        animation-duration: .01ms !important;
+      }
+    }
+  </style>
+</head>
+
+<body id="top">
+  <header class="site-header">
+    <div class="container header-inner">
       <a class="brand" href="#top" aria-label="Aether home">
-        <img class="brand-logo" src="aether.png" alt="">
+        <span class="brand-mark">
+          <img src="aether.png" alt="Aether" class="brand-logo">
+        </span>
         <span>AETHER</span>
       </a>
-      <nav class="nav-links" aria-label="Main navigation">
-        <a href="#about">About</a>
-        <a href="#features">Features</a>
-        <a href="#getting-started">Get started</a>
-      </nav>
-      <a class="github-link" href="https://github.com/jeganxthan/aether" target="_blank" rel="noreferrer">
-        GitHub <span aria-hidden="true">↗</span>
-      </a>
-    </header>
 
-    <main>
-      <section class="hero">
-        <div class="hero-copy">
-          <p class="eyebrow"><span class="status-dot"></span> A Linux desktop in the making</p>
-          <h1>A calmer way<br>to <span>work in Linux.</span></h1>
+      <nav class="nav-links" aria-label="Main navigation">
+        <a href="#project">Project</a>
+        <a href="#components">Components</a>
+        <a href="#architecture">Architecture</a>
+        <a href="#roadmap">Roadmap</a>
+      </nav>
+
+      <a class="header-cta" href="https://github.com/jeganxthan/aether" target="_blank" rel="noopener noreferrer">
+        Source code ↗
+      </a>
+    </div>
+  </header>
+
+  <main>
+    <section class="hero">
+      <div class="container hero-grid">
+        <div>
+          <p class="eyebrow"><span class="eyebrow-dot"></span> An independent Linux desktop project</p>
+          <h1>Make the desktop<br>feel like <span class="gradient-text">yours.</span></h1>
           <p class="hero-description">
-            Aether is a Rust-powered Wayland desktop built around labwc.
-            Thoughtful system controls, a native shell, and a desktop that stays out of your way.
+            Aether explores a more cohesive Linux desktop experience:
+            a Rust-powered shell, carefully designed system controls,
+            Wayland-native UI components, and a workspace built around focus.
           </p>
-          <div class="hero-actions">
-            <a class="button button-primary" href="#getting-started">Explore the project <span aria-hidden="true">↓</span></a>
-            <a class="button button-secondary" href="https://github.com/jeganxthan/aether" target="_blank" rel="noreferrer">View on GitHub <span aria-hidden="true">↗</span></a>
+
+          <div class="actions">
+            <a class="button button-primary" href="https://github.com/jeganxthan/aether" target="_blank"
+              rel="noopener noreferrer">
+              Explore the repository <span aria-hidden="true">↗</span>
+            </a>
+            <a class="button button-secondary" href="#components">
+              Explore Aether
+            </a>
           </div>
-          <div class="hero-meta">
-            <span><i></i> Built with Rust</span>
-            <span><i></i> Wayland native</span>
-            <span><i></i> Powered by labwc</span>
+
+          <div class="hero-meta" aria-label="Project technologies">
+            <span><i></i> Rust</span>
+            <span><i></i> TypeScript</span>
+            <span><i></i> Wayland</span>
+            <span><i></i> labwc</span>
           </div>
         </div>
 
-        <div class="desktop-art" role="img" aria-label="Aether desktop concept with the Aether logo and panel">
-          <div class="ambient ambient-one"></div>
-          <div class="ambient ambient-two"></div>
-          <div class="desktop-window">
-            <div class="window-center">
-              <img class="hero-logo" src="aether.png" alt="">
-              <span class="window-wordmark">AETHER</span>
-              <span class="window-caption">A Wayland desktop, built in the open.</span>
+        <div class="desktop-stage">
+          <div class="stage-glow"></div>
+          <div class="desktop-frame" role="img"
+            aria-label="Illustrative concept of the Aether desktop, dynamic island and panel">
+            <div class="desktop-orbit"></div>
+
+            <div class="mock-island">
+              <span class="island-mark"></span>
+              <span class="island-label">AETHER · SYSTEM</span>
             </div>
+
+            <div class="desktop-center">
+              <div class="desktop-symbol" aria-hidden="true">A</div>
+              <span class="desktop-wordmark">AETHER</span>
+              <span class="desktop-caption">A focused workspace for Linux</span>
+            </div>
+
             <div class="mock-panel">
-              <span class="panel-brand"><b>A</b> aether</span>
-              <span class="panel-icons" aria-hidden="true">
-                <svg viewBox="0 0 24 24"><path d="M5 10v4h3l5 4V6l-5 4H5Z"/><path d="M17 9a5 5 0 0 1 0 6M19.5 6.5a9 9 0 0 1 0 11"/></svg>
-                <svg viewBox="0 0 24 24"><path d="M12 3v18M5 7h14M5 17h14"/><circle cx="8" cy="7" r="2"/><circle cx="16" cy="17" r="2"/></svg>
-                <span>12:48</span>
+              <span class="panel-brand"><span>◈</span> aether</span>
+              <span class="panel-right" aria-hidden="true">
+                <span>◖</span>
+                <span>⌁</span>
+                <span>◉</span>
+                <span class="panel-time" id="panel-time">--:--</span>
               </span>
             </div>
           </div>
-          <div class="art-label"><span></span> Linux desktop · Wayland · Rust</div>
+          <span class="stage-caption">Concept illustration · Not a live desktop capture</span>
         </div>
-      </section>
+      </div>
+    </section>
 
-      <section class="principles" aria-label="Project principles">
-        <div><span class="principle-number">01</span><span>Native to Wayland</span></div>
-        <div><span class="principle-number">02</span><span>Rust at the shell</span></div>
-        <div><span class="principle-number">03</span><span>Composed around labwc</span></div>
-      </section>
+    <section class="principles" aria-label="Project principles">
+      <div class="container principles-grid">
+        <div class="principle">
+          <span class="principle-number">01</span>
+          <span class="principle-label">Native Linux foundations</span>
+        </div>
+        <div class="principle">
+          <span class="principle-number">02</span>
+          <span class="principle-label">Small, focused components</span>
+        </div>
+        <div class="principle">
+          <span class="principle-number">03</span>
+          <span class="principle-label">A coherent desktop experience</span>
+        </div>
+      </div>
+    </section>
 
-      <section class="section about-section" id="about">
+    <section class="section" id="project">
+      <div class="container about-grid">
         <div class="section-heading">
-          <p class="eyebrow">The idea</p>
-          <h2>A complete desktop,<br><span>built one layer at a time.</span></h2>
+          <p class="eyebrow">The project</p>
+          <h2>One workspace.<br><span class="gradient-text">Purpose-built layers.</span></h2>
         </div>
+
         <div class="about-copy">
           <p>
-            Aether pairs <strong>labwc</strong>, a lightweight Wayland compositor,
-            with a purpose-built desktop shell written in <strong>Rust</strong>.
-            Aether brings the daily essentials into one cohesive workspace: a native panel,
-            quick access to system controls, rich notifications, media controls, and a dedicated
-            settings app.
+            Aether is an evolving Linux desktop project developed around
+            <strong>labwc</strong> and the Wayland ecosystem. Its goal is to bring
+            the panel, quick controls, notifications, utilities, and settings
+            together without obscuring the underlying system.
           </p>
-          <p class="small-note">
-            The compositor remains labwc. Rust powers Aether’s shell, UI toolkit, and system
-            services—clear boundaries, working together as one desktop.
+          <p>
+            Rust is used for system-facing components and services, while
+            TypeScript and React power selected application interfaces.
+            Tauri connects the settings UI to native commands where appropriate.
+          </p>
+          <p class="note">
+            Aether is a work in progress. This page describes the project's
+            direction and architecture; individual capabilities may still be
+            under development or require integration.
           </p>
         </div>
-      </section>
+      </div>
+    </section>
 
-      <section class="section feature-section" id="features">
-        <div class="section-title-row">
+    <section class="section" id="components">
+      <div class="container">
+        <div class="section-top">
           <div>
-            <p class="eyebrow">A desktop, not just a panel</p>
-            <h2>Tools for the whole session.</h2>
+            <p class="eyebrow">The workspace</p>
+            <h2>Desktop tools, thoughtfully connected.</h2>
           </div>
-          <p class="section-summary">Aether connects the controls and utilities you use every day—without hiding the system underneath.</p>
+          <p class="section-summary">
+            Independent components share a common design direction:
+            minimal surfaces, clear system feedback, and practical controls.
+          </p>
         </div>
+
         <div class="feature-grid">
           <article class="feature-card">
-            <span class="feature-icon icon-panel" aria-hidden="true">⌘</span>
-            <h3>One place for system controls</h3>
-            <p>Manage Wi-Fi, Bluetooth, sound, displays, and power from focused, purpose-built controls.</p>
-            <span class="feature-tag">CONNECTIVITY · DEVICES · POWER</span>
+            <span class="feature-icon" aria-hidden="true">◈</span>
+            <h3>Aether Shell</h3>
+            <p>
+              A home for desktop-level interaction, including panel concepts,
+              popups, quick actions, and access to everyday system functions.
+            </p>
+            <span class="feature-tag">SHELL · WORKSPACE</span>
           </article>
-          <article class="feature-card">
-            <span class="feature-icon icon-notifications" aria-hidden="true">◌</span>
-            <h3>Notifications with context</h3>
-            <p>Keep messages in a notification center, tune out interruptions, and get useful battery and network alerts.</p>
-            <span class="feature-tag">HISTORY · DO NOT DISTURB · ALERTS</span>
-          </article>
-          <article class="feature-card">
-            <span class="feature-icon icon-settings" aria-hidden="true">◉</span>
-            <h3>A settings app that does real work</h3>
-            <p>Arrange displays, set wallpapers and themes, choose audio devices, and adjust desktop settings.</p>
-            <span class="feature-tag">DISPLAY · SOUND · APPEARANCE</span>
-          </article>
-          <article class="feature-card">
-            <span class="feature-icon icon-media" aria-hidden="true">♫</span>
-            <h3>Media that follows you</h3>
-            <p>See what is playing and control playback from the shell with previous, play, next, and seek actions.</p>
-            <span class="feature-tag">MPRIS · PLAYBACK CONTROLS</span>
-          </article>
-          <article class="feature-card">
-            <span class="feature-icon icon-tools" aria-hidden="true">⌕</span>
-            <h3>Handy desktop utilities</h3>
-            <p>Capture the screen or a selection, copy text with OCR, and pick a color from anywhere on screen.</p>
-            <span class="feature-tag">SCREENSHOTS · OCR · COLOR PICKER</span>
-          </article>
-          <article class="feature-card">
-            <span class="feature-icon icon-labwc" aria-hidden="true">⌁</span>
-            <h3>Your Wayland foundation</h3>
-            <p>Run the Rust shell with labwc, or build the optional Aether labwc session with vendored SceneFX support.</p>
-            <span class="feature-tag">LABWC · SCENEFX · WAYLAND</span>
-          </article>
-        </div>
-      </section>
 
-      <section class="architecture">
-        <div class="architecture-copy">
-          <p class="eyebrow">A few focused parts</p>
-          <h2>Different layers.<br><span>One desktop.</span></h2>
-          <p>The shell, its UI, system integrations, and compositor each have a clear role. Explore the source to see how they fit together.</p>
-          <a class="text-link" href="https://github.com/jeganxthan/aether" target="_blank" rel="noreferrer">Explore the codebase <span aria-hidden="true">↗</span></a>
-        </div>
-        <div class="architecture-stack" aria-label="Aether architecture">
-          <div class="stack-row stack-shell"><span class="stack-index">01</span><span><b>Aether Shell</b><small>Panel · popups · notifications</small></span><em>RUST</em></div>
-          <div class="stack-row stack-ui"><span class="stack-index">02</span><span><b>Aether UI</b><small>Wayland widgets · rendering</small></span><em>RUST</em></div>
-          <div class="stack-row stack-services"><span class="stack-index">03</span><span><b>Aether Services</b><small>System integrations</small></span><em>RUST</em></div>
-          <div class="stack-row stack-compositor"><span class="stack-index">04</span><span><b>labwc + SceneFX</b><small>Window management · compositing</small></span><em>WAYLAND</em></div>
-        </div>
-      </section>
+          <article class="feature-card">
+            <span class="feature-icon" aria-hidden="true">⌁</span>
+            <h3>Dynamic Island</h3>
+            <p>
+              A compact interaction surface exploring contextual system
+              feedback for connectivity, sound, battery, and notifications.
+            </p>
+            <span class="feature-tag">QUICK CONTROLS · OSD</span>
+          </article>
 
-      <section class="get-started" id="getting-started">
-        <div class="get-started-copy">
-          <p class="eyebrow">Curious? Come take a look.</p>
-          <h2>Follow the build.<br><span>Help shape what’s next.</span></h2>
-          <p>Aether is an active project. Start with the repository guide for build notes, current scope, and the labwc session setup.</p>
-        </div>
-        <div class="get-started-actions">
-          <a class="button button-primary" href="https://github.com/jeganxthan/aether" target="_blank" rel="noreferrer">Open the repository <span aria-hidden="true">↗</span></a>
-          <a class="text-link" href="https://github.com/jeganxthan/aether/blob/main/aether-labwc/README.md" target="_blank" rel="noreferrer">Read the labwc setup guide <span aria-hidden="true">↗</span></a>
-        </div>
-      </section>
-    </main>
+          <article class="feature-card">
+            <span class="feature-icon" aria-hidden="true">⚙</span>
+            <h3>Settings</h3>
+            <p>
+              A dedicated settings application for appearance, wallpaper,
+              display configuration, networking, Bluetooth, and sound devices.
+            </p>
+            <span class="feature-tag">TAURI · REACT · TYPESCRIPT</span>
+          </article>
 
-    <footer class="site-footer">
-      <a class="brand footer-brand" href="#top" aria-label="Aether home">
-        <img class="brand-logo" src="aether.png" alt="">
+          <article class="feature-card">
+            <span class="feature-icon" aria-hidden="true">◉</span>
+            <h3>Aether Services</h3>
+            <p>
+              Reusable Rust system integrations, including audio state,
+              volume control, microphone mute, and audio device operations.
+            </p>
+            <span class="feature-tag">RUST · SYSTEM INTEGRATION</span>
+          </article>
+
+          <article class="feature-card">
+            <span class="feature-icon" aria-hidden="true">▤</span>
+            <h3>Native UI experiments</h3>
+            <p>
+              Exploration of Rust-based widgets and rendering for panel
+              components, status indicators, and lightweight desktop surfaces.
+            </p>
+            <span class="feature-tag">WIDGETS · RENDERING</span>
+          </article>
+
+          <article class="feature-card">
+            <span class="feature-icon" aria-hidden="true">⌘</span>
+            <h3>Desktop utilities</h3>
+            <p>
+              A place for focused workflow tools and system helpers that can
+              complement the shell as the project develops.
+            </p>
+            <span class="feature-tag">WORKFLOW · UTILITIES</span>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <section class="section" id="architecture">
+      <div class="container">
+        <div class="architecture">
+          <div class="architecture-copy">
+            <p class="eyebrow">Inside Aether</p>
+            <h2>Clear boundaries.<br><span class="gradient-text">Shared purpose.</span></h2>
+            <p>
+              Aether separates desktop interaction, UI components, and system
+              integration so each layer can evolve independently. The compositor
+              remains responsible for window management.
+            </p>
+            <a class="text-link" href="https://github.com/jeganxthan/aether" target="_blank" rel="noopener noreferrer">
+              Browse the source <span aria-hidden="true">↗</span>
+            </a>
+          </div>
+
+          <div class="architecture-stack" aria-label="Conceptual Aether architecture">
+            <div class="stack-row">
+              <span class="stack-index">01</span>
+              <span>
+                <b>Aether Shell</b>
+                <small>Panel · island · desktop interaction</small>
+              </span>
+              <em>RUST</em>
+            </div>
+            <div class="stack-row">
+              <span class="stack-index">02</span>
+              <span>
+                <b>Aether UI</b>
+                <small>Reusable widgets · visual components</small>
+              </span>
+              <em>UI</em>
+            </div>
+            <div class="stack-row">
+              <span class="stack-index">03</span>
+              <span>
+                <b>Aether Services</b>
+                <small>Audio · devices · system operations</small>
+              </span>
+              <em>RUST</em>
+            </div>
+            <div class="stack-row">
+              <span class="stack-index">04</span>
+              <span>
+                <b>Settings Application</b>
+                <small>Tauri · React · TypeScript</small>
+              </span>
+              <em>WEB UI</em>
+            </div>
+            <div class="stack-row">
+              <span class="stack-index">05</span>
+              <span>
+                <b>Wayland Session</b>
+                <small>labwc · compositor integration</small>
+              </span>
+              <em>WAYLAND</em>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="roadmap" id="roadmap">
+      <div class="container">
+        <p class="eyebrow">Building in the open</p>
+        <h2>Designed to evolve, <span class="gradient-text">one component at a time.</span></h2>
+        <div class="roadmap-grid">
+          <article class="roadmap-item">
+            <span class="roadmap-marker"></span>
+            <div>
+              <h3>System controls</h3>
+              <p>
+                Continue improving audio, microphone mute, Wi-Fi, Bluetooth,
+                and device status integration.
+              </p>
+            </div>
+          </article>
+          <article class="roadmap-item">
+            <span class="roadmap-marker"></span>
+            <div>
+              <h3>Display and appearance</h3>
+              <p>
+                Refine monitor configuration, wallpaper selection, themes,
+                and the settings experience.
+              </p>
+            </div>
+          </article>
+          <article class="roadmap-item">
+            <span class="roadmap-marker"></span>
+            <div>
+              <h3>Desktop interaction</h3>
+              <p>
+                Develop the panel, contextual island, status feedback,
+                and lightweight system popups.
+              </p>
+            </div>
+          </article>
+          <article class="roadmap-item">
+            <span class="roadmap-marker"></span>
+            <div>
+              <h3>Session integration</h3>
+              <p>
+                Improve startup behavior, Wayland integration, and the
+                reliability of components throughout the desktop session.
+              </p>
+            </div>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <section class="container">
+      <div class="project-cta">
+        <div>
+          <p class="eyebrow">Follow the development</p>
+          <h2>Help shape Aether.</h2>
+          <p>
+            Explore the source, follow implementation progress, and see how
+            the individual parts come together into a Linux desktop.
+          </p>
+        </div>
+        <div class="actions">
+          <a class="button button-primary" href="https://github.com/jeganxthan/aether" target="_blank"
+            rel="noopener noreferrer">
+            Visit GitHub <span aria-hidden="true">↗</span>
+          </a>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer class="site-footer">
+    <div class="container footer-inner">
+      <a class="brand" href="#top">
+        <span class="brand-mark">
+          <img src="aether.png" alt="Aether" class="brand-logo">
+        </span>
         <span>AETHER</span>
       </a>
-      <p>Made for Linux. Built in the open.</p>
-      <a href="https://github.com/jeganxthan/aether" target="_blank" rel="noreferrer">GitHub <span aria-hidden="true">↗</span></a>
-    </footer>
-  </body>
+      <p class="footer-note">An independent Linux desktop project.</p>
+      <a class="footer-link" href="https://github.com/jeganxthan/aether" target="_blank" rel="noopener noreferrer">
+        Repository ↗
+      </a>
+    </div>
+  </footer>
+
+  <script>
+    (() => {
+      const clock = document.getElementById("panel-time");
+      if (!clock) return;
+
+      const updateClock = () => {
+        clock.textContent = new Intl.DateTimeFormat(undefined, {
+          hour: "2-digit",
+          minute: "2-digit",
+          hour12: false
+        }).format(new Date());
+      };
+
+      updateClock();
+      window.setInterval(updateClock, 15000);
+    })();
+  </script>
+</body>
+
 </html>

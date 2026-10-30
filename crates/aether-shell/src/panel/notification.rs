@@ -10,7 +10,7 @@ use aether_services::notifications::Notification;
 
 use crate::panel::svg::recolor::ink_image;
 use crate::services::notifications::{
-    MAX_VISIBLE, VisiblePopup, dismiss, set_card_hovered, set_close_hovered, set_hovered, visible,
+    VisiblePopup, dismiss, set_card_hovered, set_close_hovered, set_hovered, visible,
 };
 
 // the popup card size and the space between two of them
@@ -19,7 +19,7 @@ fn premium_text(value: impl Into<String>) -> Text {
 }
 
 const CARD_WIDTH: f32 = 372.0;
-const CARD_HEIGHT: f32 = 94.0;
+const CARD_MIN_HEIGHT: f32 = 94.0;
 const CARD_GAP: f32 = 8.0;
 const CARD_RADIUS: f32 = 16.0;
 const CARD_PADDING: f32 = 13.0;
@@ -58,7 +58,7 @@ pub fn notifications() -> LayerWindow {
 
     let window = LayerWindow::new()
         .width(CARD_WIDTH)
-        .height(max_stack_height())
+        .height(stack_height(&popups).max(EMPTY_HEIGHT))
         .anchor_vertical(Vertical::Top)
         .anchor_horizontal(Horizontal::Right)
         .layer(Layer::Overlay)
@@ -77,10 +77,14 @@ pub fn notifications() -> LayerWindow {
     }
 
     // only the cards themselves take the pointer, the gaps stay click through
+    let mut y = 0.0;
     let regions = popups
         .iter()
-        .enumerate()
-        .filter_map(|(index, popup)| card_region(index, popup.offset))
+        .filter_map(|popup| {
+            let region = card_region(popup, y);
+            y += card_height(&popup.notification) + CARD_GAP;
+            region
+        })
         .collect();
 
     window.input_region(regions).child(stack(popups))
@@ -95,23 +99,37 @@ fn blank() -> Rectangle {
 }
 
 // the height the window always asks for, matching the tallest stack it can show
-fn max_stack_height() -> f32 {
-    stack_height(MAX_VISIBLE).max(EMPTY_HEIGHT)
-}
-
-// the full height the window needs for a stack of this many cards
-fn stack_height(count: usize) -> f32 {
-    if count == 0 {
+fn stack_height(popups: &[VisiblePopup]) -> f32 {
+    if popups.is_empty() {
         return 0.0;
     }
 
-    count as f32 * CARD_HEIGHT + (count - 1) as f32 * CARD_GAP
+    popups
+        .iter()
+        .map(|popup| card_height(&popup.notification))
+        .sum::<f32>()
+        + (popups.len() - 1) as f32 * CARD_GAP
+}
+
+fn card_height(notification: &Notification) -> f32 {
+    let body = strip_markup(&notification.body);
+    let body_lines = wrapped_line_count(&body).clamp(1, 4) as f32;
+    (CARD_MIN_HEIGHT + (body_lines - 2.0).max(0.0) * 14.0).max(CARD_MIN_HEIGHT)
+}
+
+fn wrapped_line_count(body: &str) -> usize {
+    const CHARS_PER_LINE: usize = 42;
+
+    body.lines()
+        .map(|line| line.chars().count().div_ceil(CHARS_PER_LINE).max(1))
+        .sum::<usize>()
+        .max(1)
 }
 
 // the spot a card covers once it has slid in part of the way, or none once it is fully out
-fn card_region(index: usize, offset: f32) -> Option<InputArea> {
+fn card_region(popup: &VisiblePopup, y: f32) -> Option<InputArea> {
     // at rest the card covers the window; each step right hides that much of it
-    let left = offset * CARD_WIDTH;
+    let left = popup.offset * CARD_WIDTH;
 
     if left >= CARD_WIDTH {
         return None;
@@ -119,17 +137,23 @@ fn card_region(index: usize, offset: f32) -> Option<InputArea> {
 
     Some(InputArea {
         x: left as i32,
-        y: (index as f32 * (CARD_HEIGHT + CARD_GAP)) as i32,
+        y: y as i32,
         width: (CARD_WIDTH - left) as i32,
-        height: CARD_HEIGHT as i32,
+        height: card_height(&popup.notification) as i32,
     })
 }
 
 // the cards in one column, oldest at the top, each pushed right by its own slide
 fn stack(popups: Vec<VisiblePopup>) -> Column {
+    let mut y = 0.0;
     let cards: Vec<Box<dyn Widget>> = popups
         .into_iter()
-        .map(|popup| Box::new(card(&popup)) as Box<dyn Widget>)
+        .map(|popup| {
+            let height = card_height(&popup.notification);
+            let card = Box::new(card(&popup, height)) as Box<dyn Widget>;
+            y += height + CARD_GAP;
+            card
+        })
         .collect();
 
     Column::new(cards).width(Parent).gap(CARD_GAP)
@@ -139,7 +163,7 @@ fn stack(popups: Vec<VisiblePopup>) -> Column {
  * One floating card: the avatar of the sender, what it says and a button to
  * send it away. The card brightens while the pointer is over it.
  */
-fn card(popup: &VisiblePopup) -> Rectangle {
+fn card(popup: &VisiblePopup, height: f32) -> Rectangle {
     let visual = popup.offset.clamp(0.0, 1.0);
     let opacity = card_opacity(visual, popup.leaving);
     let scale = card_scale(visual);
@@ -149,7 +173,7 @@ fn card(popup: &VisiblePopup) -> Rectangle {
     // hovering any card holds the whole stack open; clicking one dismisses it
     Rectangle::new()
         .width(CARD_WIDTH)
-        .height(CARD_HEIGHT)
+        .height(height)
         .fill(mix_color(CARD_COLOR, CARD_HOVER_COLOR, popup.hover))
         .border(1.0, CARD_BORDER)
         .radius(CARD_RADIUS)
@@ -168,7 +192,7 @@ fn card(popup: &VisiblePopup) -> Rectangle {
         .child(
             Row::new(children![
                 avatar(&popup.notification),
-                text_column(&popup.notification),
+                text_column(&popup.notification, height),
                 close_button(id, popup.close_hover),
             ])
             .width(Parent)
@@ -351,7 +375,7 @@ fn close_button(id: u32, hover: f32) -> Rectangle {
 }
 
 // the name of the sender and how long ago it spoke, the headline and the text
-fn text_column(notification: &Notification) -> Column {
+fn text_column(notification: &Notification, card_height: f32) -> Column {
     let name = if notification.app_name.trim().is_empty() {
         "Notification"
     } else {
@@ -382,11 +406,12 @@ fn text_column(notification: &Notification) -> Column {
         .weight(Weight::Bold)
         .elide();
 
+    let body_height = (card_height - 66.0).max(28.0);
     let body = premium_text(strip_markup(&notification.body))
         .color(MUTED_TEXT_COLOR)
         .size(11.5)
         .wrap()
-        .max_lines(2);
+        .max_lines((body_height / 14.0).floor() as usize);
 
     let lines: Vec<Box<dyn Widget>> = vec![
         Box::new(Rectangle::new().width(Parent).height(13.0).child(head)),
@@ -394,7 +419,7 @@ fn text_column(notification: &Notification) -> Column {
         Box::new(
             Rectangle::new()
                 .width(Parent)
-                .height(28.0)
+                .height(body_height)
                 .clip()
                 .child(body),
         ),
@@ -517,43 +542,78 @@ pub fn card_scale(visual_offset: f32) -> f32 {
 mod tests {
     use super::*;
 
-    #[test]
-    fn a_stack_grows_by_a_card_and_a_gap() {
-        assert_eq!(stack_height(0), 0.0);
-        assert_eq!(stack_height(1), CARD_HEIGHT);
-        assert_eq!(stack_height(2), CARD_HEIGHT * 2.0 + CARD_GAP);
+    fn notification(body: &str) -> Notification {
+        Notification::new(
+            1,
+            "App".into(),
+            String::new(),
+            String::new(),
+            "Summary".into(),
+            body.into(),
+            Vec::new(),
+            5000,
+        )
+    }
+
+    fn popup(body: &str, offset: f32) -> VisiblePopup {
+        VisiblePopup {
+            id: 1,
+            notification: notification(body),
+            offset,
+            leaving: false,
+            hover: 0.0,
+            close_hover: 0.0,
+        }
     }
 
     #[test]
-    fn the_window_always_fits_the_tallest_stack() {
-        assert_eq!(max_stack_height(), stack_height(MAX_VISIBLE));
-        assert!(max_stack_height() > EMPTY_HEIGHT);
+    fn a_stack_uses_each_card_content_height() {
+        let short = popup("short", 0.0);
+        let long = popup(&"long ".repeat(100), 0.0);
+        let expected =
+            card_height(&short.notification) + card_height(&long.notification) + CARD_GAP;
+
+        assert_eq!(stack_height(&[]), 0.0);
+        assert!(card_height(&long.notification) > CARD_MIN_HEIGHT);
+        assert_eq!(stack_height(&[short, long]), expected);
+    }
+
+    #[test]
+    fn notification_body_height_is_capped() {
+        assert_eq!(card_height(&notification("")), CARD_MIN_HEIGHT);
+        assert!(card_height(&notification(&"line ".repeat(100))) <= CARD_MIN_HEIGHT + 28.0);
     }
 
     #[test]
     fn a_card_at_rest_covers_the_whole_width() {
-        let region = card_region(0, 0.0).expect("a resting card takes input");
+        let popup = popup("short", 0.0);
+        let region = card_region(&popup, 0.0).expect("a resting card takes input");
 
         assert_eq!(region.x, 0);
         assert_eq!(region.width, CARD_WIDTH as i32);
-        assert_eq!(region.height, CARD_HEIGHT as i32);
+        assert_eq!(region.height, card_height(&popup.notification) as i32);
     }
 
     #[test]
     fn a_sliding_card_shrinks_and_a_gone_card_takes_nothing() {
-        let half = card_region(0, 0.5).expect("a half shown card still takes input");
+        let half_popup = popup("short", 0.5);
+        let half = card_region(&half_popup, 0.0).expect("a half shown card still takes input");
         assert_eq!(half.x, (CARD_WIDTH / 2.0) as i32);
         assert_eq!(half.width, (CARD_WIDTH / 2.0) as i32);
 
-        assert!(card_region(0, 1.0).is_none());
+        let gone = popup("short", 1.0);
+        assert!(card_region(&gone, 0.0).is_none());
     }
 
     #[test]
     fn each_card_in_a_stack_sits_below_the_one_before() {
-        let first = card_region(0, 0.0).unwrap();
-        let second = card_region(1, 0.0).unwrap();
+        let first_popup = popup("short", 0.0);
+        let second_popup = popup("short", 0.0);
+        let first = card_region(&first_popup, 0.0).unwrap();
+        let second_y = card_height(&first_popup.notification) + CARD_GAP;
+        let second = card_region(&second_popup, second_y).unwrap();
 
-        assert_eq!(second.y, first.y + (CARD_HEIGHT + CARD_GAP) as i32);
+        assert_eq!(second.y, first.y + second_y as i32);
     }
 
     #[test]

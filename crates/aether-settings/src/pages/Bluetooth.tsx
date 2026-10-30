@@ -56,36 +56,6 @@ function DeviceIcon({ name }: { name: string }) {
   return <BluetoothIcon size={19} />;
 }
 
-function Switch({
-  enabled,
-  disabled,
-  onChange,
-}: {
-  enabled: boolean;
-  disabled?: boolean;
-  onChange: () => void;
-}) {
-  return (
-    <button
-      type="button"
-      role="switch"
-      aria-checked={enabled}
-      aria-label="Bluetooth"
-      disabled={disabled}
-      onClick={onChange}
-      className={`relative h-[25px] w-[44px] shrink-0 rounded-full transition-colors disabled:opacity-50 ${
-        enabled ? "bg-[var(--accent)]" : "bg-white/15"
-      }`}
-    >
-      <span
-        className={`absolute top-[3px] size-[19px] rounded-full bg-white shadow-sm transition-transform ${
-          enabled ? "translate-x-[22px]" : "translate-x-[3px]"
-        }`}
-      />
-    </button>
-  );
-}
-
 export default function BluetoothPage() {
   const [enabled, setEnabled] = useState(false);
   const [devices, setDevices] = useState<BluetoothDevice[]>([]);

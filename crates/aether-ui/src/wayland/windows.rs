@@ -146,4 +146,26 @@ impl WaylandState {
             self.running = false;
         }
     }
+
+    // Some compositors close layer surfaces while suspending a display and
+    // expect clients to create them again when the display wakes.
+    pub fn reopen_layer(&mut self, surface: &WlSurface) -> bool {
+        let Some(index) = self
+            .windows
+            .iter()
+            .position(|window| window.role.wl_surface() == surface)
+        else {
+            return false;
+        };
+
+        if !matches!(self.windows[index].role, Role::Layer { .. }) {
+            return false;
+        }
+
+        let window = self.windows.swap_remove(index);
+        let OpenWindow { view, output, .. } = window;
+        self.open(view, output);
+
+        true
+    }
 }

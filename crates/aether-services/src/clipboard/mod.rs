@@ -3,13 +3,14 @@ mod types;
 
 use std::{
     collections::hash_map::DefaultHasher,
+    fs,
     hash::{Hash, Hasher},
     io::{self, Write},
     process::{Command, Stdio},
     time::{SystemTime, UNIX_EPOCH},
 };
 
-pub use storage::{load_history, save_history};
+pub use storage::{data_dir, load_history, save_history};
 pub use types::{ClipboardConfig, ClipboardEntry};
 
 const MAX_TEXT_BYTES: usize = 1024 * 1024;
@@ -73,6 +74,38 @@ pub fn read_text() -> io::Result<Option<String>> {
     }
 }
 
+pub fn read_image() -> io::Result<Option<Vec<u8>>> {
+    let types = Command::new("wl-paste").args(["--list-types"]).output()?;
+    if !types.status.success() {
+        return Err(io::Error::other(
+            String::from_utf8_lossy(&types.stderr).trim().to_owned(),
+        ));
+    }
+
+    let offered = String::from_utf8_lossy(&types.stdout);
+    let Some(mime) = offered
+        .lines()
+        .map(str::trim)
+        .find(|mime| *mime == "image/png")
+    else {
+        return Ok(None);
+    };
+
+    let output = Command::new("wl-paste")
+        .args(["--no-newline", "--type", mime])
+        .output()?;
+    if !output.status.success() {
+        return Err(io::Error::other(
+            String::from_utf8_lossy(&output.stderr).trim().to_owned(),
+        ));
+    }
+    if output.stdout.is_empty() || output.stdout.len() > 16 * MAX_TEXT_BYTES {
+        return Ok(None);
+    }
+
+    Ok(Some(output.stdout))
+}
+
 pub fn copy_text(text: &str) -> io::Result<()> {
     let mut child = Command::new("wl-copy").stdin(Stdio::piped()).spawn()?;
     let result = child
@@ -82,6 +115,20 @@ pub fn copy_text(text: &str) -> io::Result<()> {
         .write_all(text.as_bytes());
     let status = child.wait()?;
     result?;
+    if status.success() {
+        Ok(())
+    } else {
+        Err(io::Error::other(format!("wl-copy exited with {status}")))
+    }
+}
+
+pub fn copy_image(path: &str) -> io::Result<()> {
+    let file = std::fs::File::open(path)?;
+    let mut child = Command::new("wl-copy")
+        .args(["--type", "image/png"])
+        .stdin(Stdio::from(file))
+        .spawn()?;
+    let status = child.wait()?;
     if status.success() {
         Ok(())
     } else {
@@ -104,6 +151,7 @@ pub fn record_text(history: &mut Vec<ClipboardEntry>, text: String, max_entries:
             ClipboardEntry {
                 id: entry_id(&text),
                 text,
+                image_path: None,
                 copied_at: now_unix_seconds(),
                 pinned: false,
             },
@@ -112,6 +160,40 @@ pub fn record_text(history: &mut Vec<ClipboardEntry>, text: String, max_entries:
 
     trim_history(history, max_entries);
     true
+}
+
+pub fn record_image(
+    history: &mut Vec<ClipboardEntry>,
+    image: &[u8],
+    max_entries: usize,
+) -> io::Result<bool> {
+    if image.is_empty() {
+        return Ok(false);
+    }
+
+    let id = entry_id_bytes(image);
+    if let Some(index) = history.iter().position(|entry| entry.id == id) {
+        let mut entry = history.remove(index);
+        entry.copied_at = now_unix_seconds();
+        history.insert(0, entry);
+        return Ok(true);
+    }
+
+    let path = data_dir()?.join(format!("{id}.png"));
+    fs::create_dir_all(path.parent().expect("image path has a parent"))?;
+    fs::write(&path, image)?;
+    history.insert(
+        0,
+        ClipboardEntry {
+            id,
+            text: "Image".into(),
+            image_path: Some(path.to_string_lossy().into_owned()),
+            copied_at: now_unix_seconds(),
+            pinned: false,
+        },
+    );
+    trim_history(history, max_entries);
+    Ok(true)
 }
 
 pub fn pin_entry(history: &mut [ClipboardEntry], id: &str) -> io::Result<bool> {
@@ -142,6 +224,12 @@ fn entry_id(text: &str) -> String {
     format!("{:x}-{:x}", now_unix_seconds(), hasher.finish())
 }
 
+fn entry_id_bytes(bytes: &[u8]) -> String {
+    let mut hasher = DefaultHasher::new();
+    bytes.hash(&mut hasher);
+    format!("image-{:x}", hasher.finish())
+}
+
 fn now_unix_seconds() -> i64 {
     SystemTime::now()
         .duration_since(UNIX_EPOCH)
@@ -156,6 +244,7 @@ mod tests {
         ClipboardEntry {
             id: id.into(),
             text: text.into(),
+            image_path: None,
             copied_at: 0,
             pinned,
         }

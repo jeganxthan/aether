@@ -11,6 +11,7 @@ import BluetoothPage from "./pages/Bluetooth";
 import WifiPage from "./pages/Wifi";
 import Appearance from "./pages/Appearance";
 import Sound from "./pages/Sound";
+import Power from "./pages/Power";
 
 export default function App() {
   const [activePage, setActivePage] =
@@ -91,14 +92,16 @@ export default function App() {
         {activePage === "Bluetooth" ? (
           <BluetoothPage />
         ) : activePage === "Network" ? (
-          <WifiPage active={true} />
+          <WifiPage />
         ) : activePage === "Appearance" ? (
           <Appearance />
         ) : activePage === "Display" ? (
           <Display />
         ) : activePage === "Sound" ? (
           <Sound />
-        ) : (
+        ) : activePage==="Power"?(
+          <Power/>
+        ):(
           <>
             <h1 className="text-[30px] font-semibold tracking-[-0.8px]">
               {activePage}

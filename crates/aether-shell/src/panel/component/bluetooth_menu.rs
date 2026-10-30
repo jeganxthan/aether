@@ -8,7 +8,7 @@ use aether::{
 };
 
 use crate::panel::top::PANEL_HEIGHT;
-use crate::services::bluetooth::{self, BluetoothDevice};
+use crate::services::{bluetooth::{self, BluetoothDevice}, display};
 use crate::theme::theme;
 
 const BOX_WIDTH: f32 = 280.0;
@@ -40,6 +40,31 @@ const MENU_ANIM_DURATION: Duration = Duration::from_millis(280);
 static OPEN: AtomicBool = AtomicBool::new(false);
 static MENU_PROGRESS: std::sync::OnceLock<std::sync::Mutex<Animation<f32>>> =
     std::sync::OnceLock::new();
+static TARGET_MONITOR: std::sync::OnceLock<std::sync::Mutex<Option<String>>> = std::sync::OnceLock::new();
+
+fn target_monitor() -> &'static std::sync::Mutex<Option<String>> {
+    TARGET_MONITOR.get_or_init(|| std::sync::Mutex::new(None))
+}
+
+fn is_target_monitor(monitor: &aether::Monitor) -> bool {
+    let target = target_monitor()
+        .lock()
+        .ok()
+        .and_then(|target| target.clone());
+
+    target.as_deref().map_or_else(
+        || {
+            display::is_primary(
+                &monitor.name,
+                monitor.x,
+                monitor.y,
+                &monitor.outputs,
+                monitor.origin_output.as_deref(),
+            )
+        },
+        |target| target == monitor.name,
+    )
+}
 
 fn premium_text(value: impl Into<String>) -> Text {
     Text::new(value).font("Maple Mono")
@@ -79,6 +104,12 @@ pub(super) fn menu_progress() -> f32 {
         .unwrap_or_else(std::sync::PoisonError::into_inner);
     animation.to(if open() { 1.0 } else { 0.0 });
     animation.value()
+}
+
+pub fn set_target_monitor(monitor: Option<String>) {
+    if let Ok(mut target) = target_monitor().lock() {
+        *target = monitor;
+    }
 }
 
 fn build_island_path(w: f32, h: f32, r_e: f32, r_b: f32) -> Path {
@@ -140,7 +171,26 @@ fn menu_height(count: usize) -> f32 {
     BOX_PADDING * 2.0 + SWITCH_TRACK_HEIGHT + BOX_GAP + list_height(count)
 }
 
-pub fn bluetooth_menu() -> LayerWindow {
+pub fn bluetooth_menu(monitor: &aether::Monitor) -> LayerWindow {
+    if !is_target_monitor(monitor) {
+        return LayerWindow::new()
+            .width(aether::Full)
+            .height(aether::Full)
+            .anchor_vertical(Vertical::Top)
+            .anchor_horizontal(Horizontal::Right)
+            .layer(Layer::Overlay)
+            .space(Zone::Ignore)
+            .namespace("aether-bluetooth-menu")
+            .keyboard(Keyboard::OnDemand)
+            .on_key(|key| {
+                if key == Key::Escape {
+                    close();
+                }
+            })
+            .click_through()
+            .child(blank());
+    }
+
     let progress = menu_progress();
 
     let window = LayerWindow::new()
@@ -151,6 +201,7 @@ pub fn bluetooth_menu() -> LayerWindow {
         .layer(Layer::Overlay)
         .space(Zone::Ignore)
         .namespace("aether-bluetooth-menu")
+        .visible(is_target_monitor(monitor))
         .keyboard(Keyboard::OnDemand)
         .on_key(|key| {
             if key == Key::Escape {

@@ -2,7 +2,7 @@ use std::{fs, io, path::PathBuf};
 
 use super::types::ClipboardEntry;
 
-fn history_path() -> io::Result<PathBuf> {
+pub fn data_dir() -> io::Result<PathBuf> {
     let base = std::env::var_os("XDG_DATA_HOME")
         .map(PathBuf::from)
         .or_else(|| std::env::var_os("HOME").map(|home| PathBuf::from(home).join(".local/share")))
@@ -13,11 +13,11 @@ fn history_path() -> io::Result<PathBuf> {
             )
         })?;
 
-    Ok(base.join("aether/clipboard/history.json"))
+    Ok(base.join("aether/clipboard"))
 }
 
 pub fn load_history() -> io::Result<Vec<ClipboardEntry>> {
-    let path = history_path()?;
+    let path = data_dir()?.join("history.json");
 
     if !path.exists() {
         return Ok(Vec::new());
@@ -28,7 +28,7 @@ pub fn load_history() -> io::Result<Vec<ClipboardEntry>> {
 }
 
 pub fn save_history(entries: &[ClipboardEntry]) -> io::Result<()> {
-    let path = history_path()?;
+    let path = data_dir()?.join("history.json");
 
     let parent = path
         .parent()

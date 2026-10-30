@@ -7,12 +7,16 @@ use aether::App;
 use panel::notification::notifications;
 use panel::osd::osd;
 use panel::top::panel;
+use std::io::Write;
+use std::net::Shutdown;
+use std::os::unix::net::UnixStream;
 // use panel::reserve::reserve;
 // use panel::island::island;
 use panel::component::battery_menu::battery_menu;
 use panel::component::battery_popup::battery_hint;
 use panel::component::bluetooth_menu::bluetooth_menu;
 use panel::component::bluetooth_popup::bluetooth_hint;
+use panel::component::clipboard_popup;
 use panel::component::notification_menu::{notification_hint, notification_menu};
 
 use panel::component::launcher::launcher;
@@ -23,11 +27,16 @@ use panel::component::wifi_popup::{wifi_hint, wifi_menu};
 use panel::lockscreen::{self, view as lockscreen};
 
 fn main() {
+    if std::env::args().nth(1).as_deref() == Some("ipc") {
+        run_ipc_client();
+        return;
+    }
+
     lockscreen::preload();
     services::notifications::ensure_started();
     // Warm up launcher applications and icon cache in the background on startup
     panel::component::launcher::preload();
-    // clipboard removed
+    clipboard_popup::start();
     polkit_auth::start();
 
     // Inside your existing async startup function:
@@ -35,25 +44,26 @@ fn main() {
         // panel mode: the top bar plus the notification popups in the top right corner
         .window_per_monitor(panel)
         .window(notifications)
-        .window(notification_hint)
-        .window(notification_menu)
+        .window_per_monitor(notification_hint)
+        .window_per_monitor(notification_menu)
         // the network name shown under the wifi icon, and the menu a click opens
-        .window(wifi_hint)
-        .window(wifi_menu)
+        .window_per_monitor(wifi_hint)
+        .window_per_monitor(wifi_menu)
         // battery percentage and time estimate on hover
-        .window(battery_hint)
-        .window(bluetooth_hint)
+        .window_per_monitor(battery_hint)
+        .window_per_monitor(bluetooth_hint)
         // battery details and power profile island opened from the battery icon
-        .window(battery_menu)
-        .window(bluetooth_menu)
+        .window_per_monitor(battery_menu)
+        .window_per_monitor(bluetooth_menu)
         // dynamic island media player popup
-        .window(player_popup)
-        .window(player_menu)
+        .window_per_monitor(player_popup)
+        .window_per_monitor(player_menu)
         .window(polkit_auth::auth_prompt)
-        .window(settings_hint)
+        .window_per_monitor(settings_hint)
+        .window(clipboard_popup::view)
         // the volume/brightness display that rises from the bottom on a change
         .window(osd)
-        .window(launcher)
+        .window_per_monitor(launcher)
         .lock(lockscreen)
         .ipc("lock", request_lock)
         // island mode instead of panel mode:
@@ -64,6 +74,33 @@ fn main() {
         .ipc("launcher", handle_launcher)
         .ipc("clipboard", handle_clipboard)
         .run();
+}
+
+fn run_ipc_client() {
+    let mut arguments = std::env::args().skip(2);
+    let Some(name) = arguments.next() else {
+        eprintln!("usage: aether-shell ipc <handler> [arguments...]");
+        return;
+    };
+
+    let socket = aether::ipc_socket();
+    let Ok(mut stream) = UnixStream::connect(&socket) else {
+        eprintln!("aether-shell: could not connect to {}", socket.display());
+        return;
+    };
+
+    if let Err(error) = write!(
+        stream,
+        "{name}\n{}",
+        arguments.collect::<Vec<_>>().join("\n")
+    ) {
+        eprintln!("aether-shell: could not send IPC request: {error}");
+        return;
+    }
+
+    if let Err(error) = stream.shutdown(Shutdown::Write) {
+        eprintln!("aether-shell: could not finish IPC request: {error}");
+    }
 }
 
 fn request_lock(_: &[String]) -> String {
@@ -115,7 +152,13 @@ fn handle_launcher(arguments: &[String]) -> String {
 }
 
 fn handle_clipboard(_arguments: &[String]) -> String {
-    "clipboard removed".to_owned()
+    match _arguments.first().map(String::as_str) {
+        Some("pin") => clipboard_popup::pin_selected(),
+        Some("close") => clipboard_popup::close(),
+        _ => clipboard_popup::toggle(),
+    }
+
+    "ok".to_owned()
 }
 
 // python3 - "$XDG_RUNTIME_DIR/aether.sock" light <<'PY'

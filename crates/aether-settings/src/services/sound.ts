@@ -1,22 +1,35 @@
 
 import { invoke } from "@tauri-apps/api/core";
 
-export interface AudioState {
-  volumePercent: number;
+
+export interface AudioDevice {
+  name: string;
+  description: string;
+  isDefault: boolean;
+  muted: boolean;
+}
+
+export interface AudioDevices {
+  outputs: AudioDevice[];
+  inputs: AudioDevice[];
+  defaultOutput: string | null;
+  defaultInput: string | null;
+}
+
+export interface MicrophoneState {
   muted: boolean;
 }
 
 export const soundService = {
-  getState: () => invoke<AudioState>("sound_get_state"),
+  listDevices: () =>
+    invoke<AudioDevices>("sound_list_devices"),
 
-  setVolume: (percent: number) =>
-    invoke<AudioState>("sound_set_volume", {
-      percent: Math.round(Math.max(0, Math.min(100, percent))),
-    }),
+  selectOutput: (name: string) =>
+    invoke<AudioDevices>("sound_select_output", { name }),
 
-  toggleMute: () => invoke<AudioState>("sound_toggle_mute"),
+  selectInput: (name: string) =>
+    invoke<AudioDevices>("sound_select_input", { name }),
 
-  increaseVolume: () => invoke<AudioState>("sound_increase_volume"),
-
-  decreaseVolume: () => invoke<AudioState>("sound_decrease_volume"),
+  setMicrophoneMute: (muted: boolean) =>
+    invoke<MicrophoneState>("sound_set_microphone_mute", { muted }),
 };

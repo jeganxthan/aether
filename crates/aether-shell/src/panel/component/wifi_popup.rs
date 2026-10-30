@@ -217,6 +217,38 @@ fn clear_password() {
     SCROLLED.store(false, Ordering::Relaxed);
 }
 
+pub fn open_wifi_on_hover_for_monitor(monitor: String) {
+    open_for_monitor(true, Some(monitor));
+}
+
+pub fn toggle_wifi_for_monitor(monitor: String) {
+    let same_monitor = target_monitor()
+        .lock()
+        .map(|target| target.as_deref() == Some(monitor.as_str()))
+        .unwrap_or(false);
+
+    if open() && same_monitor {
+        close();
+    } else {
+        open_for_monitor(false, Some(monitor));
+    }
+}
+
+pub fn set_target_monitor(monitor: Option<String>) {
+    if let Ok(mut target) = target_monitor().lock() {
+        *target = monitor;
+    }
+}
+
+fn open_for_monitor(_close_on_unhover: bool, monitor: Option<String>) {
+    HOVER_GENERATION.fetch_add(1, Ordering::Relaxed);
+    HOVERED.store(true, Ordering::Relaxed);
+    if let Ok(mut target) = target_monitor().lock() {
+        *target = monitor;
+    }
+    aether::refresh();
+}
+
 // dynamic island parameters
 const ISLAND_MAX_HEIGHT: f32 = 36.0;
 const ISLAND_MIN_BODY_WIDTH: f32 = 140.0;
@@ -246,6 +278,33 @@ static MENU_PROGRESS: OnceLock<Mutex<Animation<f32>>> = OnceLock::new();
 // the extra height and form fade when a network is selected
 const SECTION_ANIM_DURATION: Duration = Duration::from_millis(240);
 static SECTION_PROGRESS: OnceLock<Mutex<Animation<f32>>> = OnceLock::new();
+
+// target monitor for multi-monitor support
+static TARGET_MONITOR: OnceLock<Mutex<Option<String>>> = OnceLock::new();
+
+fn target_monitor() -> &'static Mutex<Option<String>> {
+    TARGET_MONITOR.get_or_init(|| Mutex::new(None))
+}
+
+fn is_target_monitor(monitor: &aether::Monitor) -> bool {
+    let target = target_monitor()
+        .lock()
+        .ok()
+        .and_then(|target| target.clone());
+
+    target.as_deref().map_or_else(
+        || {
+            crate::services::display::is_primary(
+                &monitor.name,
+                monitor.x,
+                monitor.y,
+                &monitor.outputs,
+                monitor.origin_output.as_deref(),
+            )
+        },
+        |target| target == monitor.name,
+    )
+}
 
 fn island_progress(expanded: bool) -> f32 {
     let animation = PROGRESS.get_or_init(|| {
@@ -365,7 +424,26 @@ fn build_island_border_path(w: f32, h: f32, r_e: f32, r_b: f32) -> Path {
  * the wifi icon, smoothly expanding downward on hover to show the connected
  * network name, signal icon, and connection status or link speed.
  */
-pub fn wifi_hint() -> LayerWindow {
+pub fn wifi_hint(monitor: &aether::Monitor) -> LayerWindow {
+    if !is_target_monitor(monitor) {
+        return LayerWindow::new()
+            .width(ISLAND_WINDOW_WIDTH)
+            .height(ISLAND_WINDOW_HEIGHT)
+            .anchor_vertical(Vertical::Top)
+            .anchor_horizontal(Horizontal::Right)
+            .layer(Layer::Top)
+            .space(Zone::Ignore)
+            .namespace("aether-wifi")
+            .margin(Margin {
+                top: PANEL_HEIGHT as i32,
+                right: ISLAND_EDGE_INSET_RIGHT as i32,
+                bottom: 0,
+                left: 0,
+            })
+            .click_through()
+            .child(blank());
+    }
+
     // stay open while the menu is moving, so the menu can grow out of the
     // hovered island and shrink back into it instead of replacing it abruptly
     let menu = menu_progress();
@@ -533,13 +611,17 @@ pub fn wifi_hint() -> LayerWindow {
             ),
     ]);
 
+    let monitor_name = monitor.name.clone();
     let island_card = Rectangle::new()
         .width(current_total_w)
         .height(current_h)
         .fill(Color::TRANSPARENT)
         .cursor(Cursor::Pointer)
         .on_hover(set_hovered)
-        .on_click(|_| toggle_open())
+        .on_click(move |_| {
+            super::wifi_popup::set_target_monitor(Some(monitor_name.clone()));
+            toggle_open();
+        })
         .child(island_stack);
 
     let island_x = (ISLAND_WINDOW_WIDTH - current_total_w).max(0.0).round() as i32;
@@ -562,6 +644,7 @@ pub fn wifi_hint() -> LayerWindow {
         .layer(Layer::Top)
         .space(Zone::Ignore)
         .namespace("aether-wifi")
+        .visible(is_target_monitor(monitor))
         .margin(Margin {
             top: PANEL_HEIGHT as i32,
             right: ISLAND_EDGE_INSET_RIGHT as i32,
@@ -650,7 +733,38 @@ fn speed_text() -> Option<String> {
  * right, smoothly attached to the panel like a dynamic island with inverse curved ears.
  * The menu animates open and closed with a smooth height and opacity transition.
  */
-pub fn wifi_menu() -> LayerWindow {
+pub fn wifi_menu(monitor: &aether::Monitor) -> LayerWindow {
+    if !is_target_monitor(monitor) {
+        return LayerWindow::new()
+            .width(aether::Full)
+            .height(aether::Full)
+            .anchor_vertical(Vertical::Top)
+            .anchor_horizontal(Horizontal::Right)
+            .layer(Layer::Overlay)
+            .space(Zone::Ignore)
+            .namespace("aether-wifi-menu")
+            .visible(is_target_monitor(monitor))
+            .keyboard(Keyboard::OnDemand)
+            .on_key(|key| {
+                if key != Key::Escape {
+                    return;
+                }
+
+                // Escape steps back one layer: it drops the password input first and
+                // only closes the menu once nothing is left to step back from
+                if awaiting_password() {
+                    clear_password();
+                    cancel_password();
+
+                    return;
+                }
+
+                close();
+            })
+            .click_through()
+            .child(blank());
+    }
+
     let progress = menu_progress();
 
     let window = LayerWindow::new()

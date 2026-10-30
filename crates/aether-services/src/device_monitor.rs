@@ -35,7 +35,7 @@ async fn run() -> io::Result<()> {
     };
 
     let socket = match udev::MonitorBuilder::new()
-        .and_then(|builder| builder.match_subsystem("usb"))
+        .and_then(|builder| builder.match_subsystem_devtype("usb", "usb_device"))
         .and_then(|builder| builder.match_subsystem("input"))
         .and_then(|builder| builder.match_subsystem("sound"))
         .and_then(|builder| builder.match_subsystem("drm"))
@@ -122,6 +122,16 @@ async fn handle_event(connection: &Connection, event: &udev::Event) {
 
     let device_name = detect_device_name(event, subsystem, device_type);
 
+    if subsystem == "usb" && !is_notifiable_usb_device(event) {
+        return;
+    }
+
+    // DRM also emits card-level power events. Only connector nodes represent
+    // an actual display hotplug.
+    if subsystem == "drm" && !event.sysname().to_string_lossy().contains('-') {
+        return;
+    }
+
     // A charger (or other power event) can masquerade as a DRM hotplug on some
     // machines. Only announce a display when an external display is actually
     // reported as connected by the kernel.
@@ -144,6 +154,24 @@ async fn handle_event(connection: &Connection, event: &udev::Event) {
     if let Err(error) = send_notification(connection, title, &body, icon).await {
         eprintln!("Could not send device notification: {error}");
     }
+}
+
+fn is_notifiable_usb_device(device: &udev::Device) -> bool {
+    let Some(interfaces) = device
+        .property_value("ID_USB_INTERFACES")
+        .and_then(|value| value.to_str())
+    else {
+        return false;
+    };
+
+    // HID, mass-storage, and USB-audio devices are useful user-facing events.
+    is_notifiable_usb_interfaces(interfaces)
+}
+
+fn is_notifiable_usb_interfaces(interfaces: &str) -> bool {
+    interfaces
+        .split(':')
+        .any(|class| class.starts_with("03") || class.starts_with("08") || class.starts_with("01"))
 }
 
 fn detect_device_name(device: &udev::Device, subsystem: &str, device_type: &str) -> String {
@@ -323,6 +351,13 @@ mod tests {
     fn a_usb_interface_is_skipped() {
         // a composite device sends one event per interface; only the device itself is news
         assert!(device_message("usb", "usb_interface", "Some Drive", true, false).is_none());
+    }
+
+    #[test]
+    fn only_user_facing_usb_classes_are_notifiable() {
+        assert!(is_notifiable_usb_interfaces(":030101:"));
+        assert!(is_notifiable_usb_interfaces(":080650:"));
+        assert!(!is_notifiable_usb_interfaces(":090000:"));
     }
 
     #[test]
