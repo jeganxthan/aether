@@ -16,7 +16,6 @@ use panel::component::battery_menu::battery_menu;
 use panel::component::battery_popup::battery_hint;
 use panel::component::bluetooth_menu::bluetooth_menu;
 use panel::component::bluetooth_popup::bluetooth_hint;
-use panel::component::clipboard_popup;
 use panel::component::notification_menu::{notification_hint, notification_menu};
 
 use panel::component::launcher::launcher;
@@ -36,14 +35,13 @@ fn main() {
     services::notifications::ensure_started();
     // Warm up launcher applications and icon cache in the background on startup
     panel::component::launcher::preload();
-    clipboard_popup::start();
     polkit_auth::start();
 
     // Inside your existing async startup function:
     App::new()
         // panel mode: the top bar plus the notification popups in the top right corner
         .window_per_monitor(panel)
-        .window(notifications)
+        .window_per_monitor(notifications)
         .window_per_monitor(notification_hint)
         .window_per_monitor(notification_menu)
         // the network name shown under the wifi icon, and the menu a click opens
@@ -60,7 +58,6 @@ fn main() {
         .window_per_monitor(player_menu)
         .window(polkit_auth::auth_prompt)
         .window_per_monitor(settings_hint)
-        .window(clipboard_popup::view)
         // the volume/brightness display that rises from the bottom on a change
         .window(osd)
         .window_per_monitor(launcher)
@@ -72,7 +69,6 @@ fn main() {
         // `aether ipc call theme light` / `dark` / `toggle`, and the shell redraws in it
         .ipc("theme", switch_theme)
         .ipc("launcher", handle_launcher)
-        .ipc("clipboard", handle_clipboard)
         .run();
 }
 
@@ -146,16 +142,6 @@ fn handle_launcher(arguments: &[String]) -> String {
         _ => {
             panel::component::launcher::toggle();
         }
-    }
-
-    "ok".to_owned()
-}
-
-fn handle_clipboard(_arguments: &[String]) -> String {
-    match _arguments.first().map(String::as_str) {
-        Some("pin") => clipboard_popup::pin_selected(),
-        Some("close") => clipboard_popup::close(),
-        _ => clipboard_popup::toggle(),
     }
 
     "ok".to_owned()

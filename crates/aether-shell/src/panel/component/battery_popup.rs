@@ -29,6 +29,7 @@ const ICON_SIZE: f32 = 14.0;
 const ANIMATION_DURATION: Duration = super::popup_motion::EXPANSION_DURATION;
 static PROGRESS: OnceLock<Mutex<Animation<f32>>> = OnceLock::new();
 static HOVERED: AtomicBool = AtomicBool::new(false);
+static OPEN: AtomicBool = AtomicBool::new(false);
 static HOVER_GENERATION: AtomicU64 = AtomicU64::new(0);
 static TARGET_MONITOR: OnceLock<Mutex<Option<String>>> = OnceLock::new();
 
@@ -64,6 +65,10 @@ pub fn hovered() -> bool {
     HOVERED.load(Ordering::Relaxed)
 }
 
+pub fn is_open() -> bool {
+    OPEN.load(Ordering::Relaxed)
+}
+
 pub fn open_battery_on_hover_for_monitor(monitor: String) {
     open_for_monitor(true, Some(monitor));
 }
@@ -74,16 +79,20 @@ pub fn toggle_battery_for_monitor(monitor: String) {
         .map(|target| target.as_deref() == Some(monitor.as_str()))
         .unwrap_or(false);
 
-    if hovered() && same_monitor {
+    if is_open() && same_monitor {
         close();
     } else {
         open_for_monitor(false, Some(monitor));
     }
 }
 
-fn open_for_monitor(_close_on_unhover: bool, monitor: Option<String>) {
+fn open_for_monitor(close_on_unhover: bool, monitor: Option<String>) {
     HOVER_GENERATION.fetch_add(1, Ordering::Relaxed);
     HOVERED.store(true, Ordering::Relaxed);
+    if !close_on_unhover {
+        // Click (not hover) should open the menu persistently
+        OPEN.store(true, Ordering::Relaxed);
+    }
     if let Ok(mut target) = target_monitor().lock() {
         *target = monitor;
     }
@@ -96,7 +105,9 @@ fn close() {
     if let Ok(mut target) = target_monitor().lock() {
         *target = None;
     }
-    aether::refresh();
+    if OPEN.swap(false, Ordering::Relaxed) {
+        aether::refresh();
+    }
 }
 
 fn progress() -> f32 {

@@ -87,6 +87,10 @@ pub fn hovered() -> bool {
     HOVERED.load(Ordering::Relaxed)
 }
 
+pub fn is_open() -> bool {
+    MENU_OPEN.load(Ordering::Relaxed)
+}
+
 pub fn toggle_menu() {
     MENU_OPEN.fetch_xor(true, Ordering::Relaxed);
     aether::refresh();
@@ -108,7 +112,7 @@ pub fn toggle_player_for_monitor(monitor: String) {
         .map(|target| target.as_deref() == Some(monitor.as_str()))
         .unwrap_or(false);
 
-    if hovered() && same_monitor {
+    if is_open() && same_monitor {
         close();
     } else {
         open_for_monitor(false, Some(monitor));
@@ -121,9 +125,13 @@ pub fn set_target_monitor(monitor: Option<String>) {
     }
 }
 
-fn open_for_monitor(_close_on_unhover: bool, monitor: Option<String>) {
+fn open_for_monitor(close_on_unhover: bool, monitor: Option<String>) {
     HOVER_GENERATION.fetch_add(1, Ordering::Relaxed);
     HOVERED.store(true, Ordering::Relaxed);
+    if !close_on_unhover {
+        // Click (not hover) should open the menu persistently
+        MENU_OPEN.store(true, Ordering::Relaxed);
+    }
     if let Ok(mut target) = target_monitor().lock() {
         *target = monitor;
     }
@@ -136,7 +144,9 @@ fn close() {
     if let Ok(mut target) = target_monitor().lock() {
         *target = None;
     }
-    aether::refresh();
+    if MENU_OPEN.swap(false, Ordering::Relaxed) {
+        aether::refresh();
+    }
 }
 
 pub fn player_menu(monitor: &aether::Monitor) -> LayerWindow {

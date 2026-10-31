@@ -1,6 +1,6 @@
 use aether::{
-    Align, Center, Color, Cursor, End, Full, Layer, LayerWindow, Padding, Parent, Rectangle, Row,
-    Stack, Start, Text, Vertical, Widget, Zone, children,
+    Align, Center, Color, Cursor, End, Full, Layer, LayerWindow, Padding, Parent,
+    Rectangle, Row, Stack, Start, Text, Vertical, Widget, Zone, children,
 };
 
 use crate::panel::component::battery_popup;
@@ -13,6 +13,7 @@ use crate::panel::component::wifi_popup;
 use crate::panel::svg::battery_svg::BatteryIcon;
 use crate::panel::svg::distro_svg::distro_icon;
 use crate::panel::svg::player_svg::player_brand_icon;
+use crate::panel::svg::recolor;
 use crate::panel::svg::wifi_svg::WifiSignalIcon;
 use crate::services::battery::battery;
 use crate::services::bluetooth as bt_service;
@@ -87,6 +88,7 @@ pub fn panel(monitor: &aether::Monitor) -> LayerWindow {
     if let Some(p) = active_player {
         let hover_monitor_player = monitor.name.clone();
         let click_monitor_player = monitor.name.clone();
+        let click_monitor_player_child = click_monitor_player.clone();
         right_items.push(Box::new(
             Rectangle::new()
                 .width(PLAYER_HIT_WIDTH)
@@ -108,7 +110,11 @@ pub fn panel(monitor: &aether::Monitor) -> LayerWindow {
                     Rectangle::new()
                         .width(ICON_SIZE)
                         .height(ICON_SIZE)
-                        .fill(player_brand_icon(p.brand)),
+                        .fill(player_brand_icon(p.brand))
+                        .cursor(Cursor::Pointer)
+                        .on_click(move |_| {
+                            player_popup::toggle_player_for_monitor(click_monitor_player_child.clone());
+                        }),
                 ),
         ));
         right_items.push(Box::new(

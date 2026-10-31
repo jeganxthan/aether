@@ -1,17 +1,17 @@
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
-use std::sync::{OnceLock, RwLock};
+use std::sync::{Mutex, OnceLock, RwLock};
 use std::time::Duration;
 
 use aether::{
     Align, Animation, Canvas, Color, Column, Cursor, Easing, Horizontal, InputArea, Key, Keyboard,
-    Layer, LayerWindow, Padding, Parent, Path, Rectangle, Row, Shape, Stack, Start, Text,
-    TextInput, Vertical, Weight, Widget, Zone, children,
+    Layer, LayerWindow, Monitor, Padding, Parent, Path, Rectangle, Row, Shape, Stack,
+    Start, Text, TextInput, Vertical, Weight, Widget, Zone, children,
 };
 use aether_services::clipboard::{self, ClipboardEntry};
 
 use crate::panel::svg::recolor;
 use crate::panel::top::PANEL_HEIGHT;
-use crate::services::runtime::runtime;
+use crate::services::{display, runtime::runtime};
 use crate::theme::theme;
 
 const BOX_WIDTH: f32 = 440.0;
@@ -36,6 +36,31 @@ static ENTRIES: OnceLock<RwLock<Vec<ClipboardEntry>>> = OnceLock::new();
 static QUERY: OnceLock<RwLock<String>> = OnceLock::new();
 static WATCHER_STARTED: AtomicBool = AtomicBool::new(false);
 static HEIGHT_ANIMATION: OnceLock<std::sync::Mutex<Animation<f32>>> = OnceLock::new();
+static TARGET_MONITOR: OnceLock<Mutex<Option<String>>> = OnceLock::new();
+
+fn target_monitor() -> &'static Mutex<Option<String>> {
+    TARGET_MONITOR.get_or_init(|| Mutex::new(None))
+}
+
+fn is_target_monitor(monitor: &Monitor) -> bool {
+    let target = target_monitor()
+        .lock()
+        .ok()
+        .and_then(|target| target.clone());
+
+    target.as_deref().map_or_else(
+        || {
+            display::is_primary(
+                &monitor.name,
+                monitor.x,
+                monitor.y,
+                &monitor.outputs,
+                monitor.origin_output.as_deref(),
+            )
+        },
+        |target| target == monitor.name,
+    )
+}
 
 fn animated_height(target: f32) -> f32 {
     let animation = HEIGHT_ANIMATION.get_or_init(|| {
@@ -189,6 +214,17 @@ pub fn toggle() {
     }
 }
 
+pub fn open_clipboard_for_monitor(monitor: String) {
+    open_for_monitor(false, Some(monitor));
+}
+
+fn open_for_monitor(_close_on_unhover: bool, monitor: Option<String>) {
+    if let Ok(mut target) = target_monitor().lock() {
+        *target = monitor;
+    }
+    open();
+}
+
 fn filtered_entries() -> Vec<ClipboardEntry> {
     let needle = query().to_lowercase();
     entries()
@@ -269,7 +305,7 @@ fn move_selection(delta: isize) {
     aether::refresh();
 }
 
-pub fn view() -> LayerWindow {
+pub fn view(monitor: &Monitor) -> LayerWindow {
     let is_open = is_open();
     let matching = filtered_entries();
     let visible_count = matching.len().min(MAX_VISIBLE);
@@ -291,6 +327,7 @@ pub fn view() -> LayerWindow {
         .anchor_horizontal(Horizontal::Left)
         .layer(Layer::Overlay)
         .space(Zone::Ignore)
+        .visible(is_open && is_target_monitor(monitor))
         .namespace("aether-clipboard")
         .keyboard(if is_open {
             Keyboard::Exclusive

@@ -26,6 +26,7 @@ const SLIDER_TOUCH_HEIGHT: f32 = 132.0;
 const SLIDER_WIDTH: f32 = 54.0;
 
 static HOVERED: AtomicBool = AtomicBool::new(false);
+static OPEN: AtomicBool = AtomicBool::new(false);
 static HOVER_GENERATION: AtomicU64 = AtomicU64::new(0);
 static PROGRESS: OnceLock<std::sync::Mutex<Animation<f32>>> = OnceLock::new();
 static BLUETOOTH: OnceLock<RwLock<Option<bool>>> = OnceLock::new();
@@ -86,12 +87,15 @@ pub fn toggle_settings_for_monitor(monitor: String) {
 }
 
 fn is_open() -> bool {
-    HOVERED.load(Ordering::Relaxed)
+    OPEN.load(Ordering::Relaxed)
 }
 
-fn open_for_monitor(_close_on_unhover: bool, monitor: Option<String>) {
+fn open_for_monitor(close_on_unhover: bool, monitor: Option<String>) {
     HOVER_GENERATION.fetch_add(1, Ordering::Relaxed);
     HOVERED.store(true, Ordering::Relaxed);
+    if !close_on_unhover {
+        // Click (not hover) should open the menu persistently
+    }
     if let Ok(mut target) = target_monitor().lock() {
         *target = monitor;
     }
@@ -104,7 +108,9 @@ fn close() {
     if let Ok(mut target) = target_monitor().lock() {
         *target = None;
     }
-    aether::refresh();
+    if OPEN.swap(false, Ordering::Relaxed) {
+        aether::refresh();
+    }
 }
 
 fn progress() -> f32 {

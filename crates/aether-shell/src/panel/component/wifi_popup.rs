@@ -240,9 +240,13 @@ pub fn set_target_monitor(monitor: Option<String>) {
     }
 }
 
-fn open_for_monitor(_close_on_unhover: bool, monitor: Option<String>) {
+fn open_for_monitor(close_on_unhover: bool, monitor: Option<String>) {
     HOVER_GENERATION.fetch_add(1, Ordering::Relaxed);
     HOVERED.store(true, Ordering::Relaxed);
+    if !close_on_unhover {
+        // Click (not hover) should open the menu persistently
+        OPEN.store(true, Ordering::Relaxed);
+    }
     if let Ok(mut target) = target_monitor().lock() {
         *target = monitor;
     }

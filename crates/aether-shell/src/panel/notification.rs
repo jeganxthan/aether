@@ -9,6 +9,7 @@ use aether::{
 use aether_services::notifications::Notification;
 
 use crate::panel::svg::recolor::ink_image;
+use crate::services::display;
 use crate::services::notifications::{
     VisiblePopup, dismiss, set_card_hovered, set_close_hovered, set_hovered, visible,
 };
@@ -53,8 +54,15 @@ const CLOSE_HOVER_COLOR: Color = Color::rgba(41, 43, 53, 230);
  * The window stays one card wide and anchored to the right, so cards sliding out
  * are naturally clipped at the surface boundary.
  */
-pub fn notifications() -> LayerWindow {
+pub fn notifications(monitor: &aether::Monitor) -> LayerWindow {
     let popups = visible();
+    let on_primary = display::is_primary(
+        &monitor.name,
+        monitor.x,
+        monitor.y,
+        &monitor.outputs,
+        monitor.origin_output.as_deref(),
+    );
 
     let window = LayerWindow::new()
         .width(CARD_WIDTH)
@@ -64,6 +72,7 @@ pub fn notifications() -> LayerWindow {
         .layer(Layer::Overlay)
         .space(Zone::Ignore)
         .namespace("aether-notification")
+        .visible(on_primary)
         .margin(Margin {
             top: EDGE_INSET_TOP as i32,
             right: EDGE_INSET_RIGHT as i32,
@@ -72,7 +81,7 @@ pub fn notifications() -> LayerWindow {
         });
 
     // nothing on screen means nothing to draw or click, so the window is click through
-    if popups.is_empty() {
+    if popups.is_empty() || !on_primary {
         return window.click_through().child(blank());
     }
 
