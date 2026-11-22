@@ -1,0 +1,7 @@
+type               = process
+command            = aether --session
+restart            = false
+working-dir        = $HOME
+ready-notification = pipevar:NOTIFY_FD
+logfile            = $HOME/.local/share/aether/aether.log
+depends-on:        dbus

@@ -1,0 +1,13 @@
+
+[package]
+name = "aether-shell"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+gpui = {
+    package = "gpui-ce",
+    version = "0.2",
+    features = ["wayland"]
+}
+gpui_platform = { package = "gpui_ce_platform", version = "0.1" }

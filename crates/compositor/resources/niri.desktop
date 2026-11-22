@@ -1,0 +1,6 @@
+[Desktop Entry]
+Name=Aether
+Comment=A scrollable-tiling Wayland compositor
+Exec=aether-session
+Type=Application
+DesktopNames=aether

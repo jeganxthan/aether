@@ -1,0 +1,6 @@
+{"run_id":"1795152163-785403063","line":55,"new":{"module_name":"aether__tests__transactions","snapshot_name":"column_resize_waits_for_both_windows","metadata":{"source":"src/tests/transactions.rs","assertion_line":55,"expression":"window.format_recent_configures()"},"snapshot":""},"old":{"module_name":"aether__tests__transactions","metadata":{},"snapshot":"size: 936 × 516, bounds: 1888 × 1048, states: []"}}
+{"run_id":"1795152256-419654132","line":55,"new":null,"old":null}
+{"run_id":"1795152256-419654132","line":62,"new":null,"old":null}
+{"run_id":"1795152256-419654132","line":71,"new":null,"old":null}
+{"run_id":"1795152256-419654132","line":89,"new":null,"old":null}
+{"run_id":"1795152256-419654132","line":101,"new":null,"old":null}

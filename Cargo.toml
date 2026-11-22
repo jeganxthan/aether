@@ -1,0 +1,20 @@
+[package]
+name = "Aether"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+gpui = { git = "https://github.com/zed-industries/zed.git", rev = "b51ffab0153f3372b71d1bd565d48d5203fefe6a", default-features = false, features = [
+    "wayland",
+] }
+gpui_platform = { git = "https://github.com/zed-industries/zed.git", rev = "b51ffab0153f3372b71d1bd565d48d5203fefe6a", default-features = false, features = [
+    "wayland",
+] }
+
+[workspace]
+members = [
+    "crates/aether-services",
+    "crates/aether-settings",
+    "crates/aether-shell"
+]
+exclude = ["crates/compositor"]

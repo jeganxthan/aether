@@ -1,0 +1,5 @@
+cargo build --release
+sudo install -Dm755 target/release/aether /usr/local/bin/aether
+/usr/local/bin/aether --version
+cat /usr/share/wayland-sessions/aether.desktop
+

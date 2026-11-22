@@ -1,0 +1,101 @@
+{"run_id":"1795152163-785403063","line":763,"new":{"module_name":"aether__tests__floating","snapshot_name":"interactive_move_restores_floating_size_when_set_to_floating","metadata":{"source":"src/tests/floating.rs","assertion_line":763,"expression":"f.client(id).window(&surface).format_recent_configures()"},"snapshot":"size: 100 × 100, bounds: 1920 × 1080, states: [Activated]"},"old":{"module_name":"aether__tests__floating","metadata":{},"snapshot":"size: 200 × 1048, bounds: 1888 × 1048, states: [Activated]"}}
+{"run_id":"1795152163-785403063","line":959,"new":{"module_name":"aether__tests__floating","snapshot_name":"floating_respects_non_fixed_min_max_rule","metadata":{"source":"src/tests/floating.rs","assertion_line":959,"expression":"f.client(id).window(&surface).format_recent_configures()"},"snapshot":"size: 200 × 1048, bounds: 1888 × 1048, states: [Activated]"},"old":{"module_name":"aether__tests__floating","metadata":{},"snapshot":"size: 200 × 100, bounds: 1920 × 1080, states: [Activated]"}}
+{"run_id":"1795152163-785403063","line":468,"new":null,"old":null}
+{"run_id":"1795152163-785403063","line":538,"new":{"module_name":"aether__tests__floating","snapshot_name":"interactive_move_unmaximize_to_floating_restores_size-2","metadata":{"source":"src/tests/floating.rs","assertion_line":538,"expression":"f.client(id).window(&surface).format_recent_configures()"},"snapshot":"size: 100 × 1048, bounds: 1920 × 1080, states: [Activated]"},"old":{"module_name":"aether__tests__floating","metadata":{},"snapshot":"size: 200 × 200, bounds: 1920 × 1080, states: [Activated]"}}
+{"run_id":"1795152163-785403063","line":575,"new":{"module_name":"aether__tests__floating","snapshot_name":"resize_during_interactive_move_propagates_to_floating","metadata":{"source":"src/tests/floating.rs","assertion_line":575,"expression":"f.client(id).window(&surface).format_recent_configures()"},"snapshot":"size: 100 × 1048, bounds: 1920 × 1080, states: [Activated]"},"old":{"module_name":"aether__tests__floating","metadata":{},"snapshot":""}}
+{"run_id":"1795152163-785403063","line":383,"new":{"module_name":"aether__tests__floating","snapshot_name":"moving_across_workspaces_doesnt_cancel_resize","metadata":{"source":"src/tests/floating.rs","assertion_line":383,"expression":"f.client(id).window(&surface).format_recent_configures()"},"snapshot":"size: 500 × 1048, bounds: 1888 × 1048, states: [Activated]"},"old":{"module_name":"aether__tests__floating","metadata":{},"snapshot":"size: 500 × 200, bounds: 1920 × 1080, states: [Activated]"}}
+{"run_id":"1795152163-785403063","line":1337,"new":{"module_name":"aether__tests__floating","snapshot_name":"repeated_size_request","metadata":{"source":"src/tests/floating.rs","assertion_line":1337,"expression":"f.client(id).window(&surface).format_recent_configures()"},"snapshot":"size: 100 × 1048, bounds: 1888 × 1048, states: [Activated]"},"old":{"module_name":"aether__tests__floating","metadata":{},"snapshot":"size: 936 × 1048, bounds: 1920 × 1080, states: [Activated]"}}
+{"run_id":"1795152163-785403063","line":489,"new":{"module_name":"aether__tests__floating","snapshot_name":"interactive_move_unfullscreen_to_floating_restores_size-2","metadata":{"source":"src/tests/floating.rs","assertion_line":489,"expression":"f.client(id).window(&surface).format_recent_configures()"},"snapshot":"size: 100 × 1048, bounds: 1920 × 1080, states: [Activated]"},"old":{"module_name":"aether__tests__floating","metadata":{},"snapshot":"size: 200 × 200, bounds: 1920 × 1080, states: [Activated]"}}
+{"run_id":"1795152163-785403063","line":430,"new":{"module_name":"aether__tests__floating","snapshot_name":"moving_to_floating_doesnt_cancel_resize","metadata":{"source":"src/tests/floating.rs","assertion_line":430,"expression":"f.client(id).window(&surface).format_recent_configures()"},"snapshot":""},"old":{"module_name":"aether__tests__floating","metadata":{},"snapshot":"size: 500 × 1048, bounds: 1888 × 1048, states: [Activated]"}}
+{"run_id":"1795152163-785403063","line":623,"new":{"module_name":"aether__tests__floating","snapshot_name":"resize_in_steps","metadata":{"source":"src/tests/floating.rs","assertion_line":623,"expression":"f.client(id).window(&surface).format_recent_configures()"},"snapshot":"size: 500 × 500, bounds: 1888 × 1048, states: [Activated]"},"old":{"module_name":"aether__tests__floating","metadata":{},"snapshot":"size: 500 × 500, bounds: 1920 × 1080, states: [Activated]"}}
+{"run_id":"1795152163-785403063","line":340,"new":{"module_name":"aether__tests__floating","snapshot_name":"restore_floating_size","metadata":{"source":"src/tests/floating.rs","assertion_line":340,"expression":"f.client(id).window(&surface).format_recent_configures()"},"snapshot":"size: 100 × 100, bounds: 1920 × 1080, states: [Activated]"},"old":{"module_name":"aether__tests__floating","metadata":{},"snapshot":"size: 200 × 1048, bounds: 1888 × 1048, states: [Activated]"}}
+{"run_id":"1795152163-785403063","line":129,"new":{"module_name":"aether__tests__floating","snapshot_name":"resize_to_different_size","metadata":{"source":"src/tests/floating.rs","assertion_line":129,"expression":"f.client(id).window(&surface).format_recent_configures()"},"snapshot":"size: 500 × 1048, bounds: 1888 × 1048, states: [Activated]"},"old":{"module_name":"aether__tests__floating","metadata":{},"snapshot":"size: 500 × 100, bounds: 1920 × 1080, states: [Activated]"}}
+{"run_id":"1795152163-785403063","line":256,"new":{"module_name":"aether__tests__floating","snapshot_name":"resize_to_same_size","metadata":{"source":"src/tests/floating.rs","assertion_line":256,"expression":"f.client(id).window(&surface).format_recent_configures()"},"snapshot":"size: 200 × 1048, bounds: 1888 × 1048, states: [Activated]"},"old":{"module_name":"aether__tests__floating","metadata":{},"snapshot":"size: 200 × 200, bounds: 1920 × 1080, states: [Activated]"}}
+{"run_id":"1795152163-785403063","line":281,"new":{"module_name":"aether__tests__floating","snapshot_name":"resize_to_different_then_same","metadata":{"source":"src/tests/floating.rs","assertion_line":281,"expression":"f.client(id).window(&surface).format_recent_configures()"},"snapshot":"size: 500 × 1048, bounds: 1888 × 1048, states: [Activated]"},"old":{"module_name":"aether__tests__floating","metadata":{},"snapshot":"size: 500 × 100, bounds: 1920 × 1080, states: [Activated]"}}
+{"run_id":"1795152163-785403063","line":91,"new":{"module_name":"aether__tests__floating","snapshot_name":"unfocus_preserves_current_size","metadata":{"source":"src/tests/floating.rs","assertion_line":91,"expression":"window.format_recent_configures()"},"snapshot":"size: 100 × 1048, bounds: 1888 × 1048, states: []"},"old":{"module_name":"aether__tests__floating","metadata":{},"snapshot":"size: 200 × 200, bounds: 1920 × 1080, states: []"}}
+{"run_id":"1795152163-785403063","line":1162,"new":null,"old":null}
+{"run_id":"1795152163-785403063","line":197,"new":{"module_name":"aether__tests__floating","snapshot_name":"set_window_width_uses_current_height","metadata":{"source":"src/tests/floating.rs","assertion_line":197,"expression":"f.client(id).window(&surface).format_recent_configures()"},"snapshot":"size: 500 × 1048, bounds: 1888 × 1048, states: [Activated]"},"old":{"module_name":"aether__tests__floating","metadata":{},"snapshot":"size: 500 × 200, bounds: 1920 × 1080, states: [Activated]"}}
+{"run_id":"1795152163-785403063","line":225,"new":{"module_name":"aether__tests__floating","snapshot_name":"set_window_height_uses_current_width","metadata":{"source":"src/tests/floating.rs","assertion_line":225,"expression":"f.client(id).window(&surface).format_recent_configures()"},"snapshot":"size: 100 × 500, bounds: 1888 × 1048, states: [Activated]"},"old":{"module_name":"aether__tests__floating","metadata":{},"snapshot":"size: 200 × 500, bounds: 1920 × 1080, states: [Activated]"}}
+{"run_id":"1795152163-785403063","line":1267,"new":null,"old":null}
+{"run_id":"1795152163-785403063","line":1083,"new":null,"old":null}
+{"run_id":"1795152163-785403063","line":1121,"new":null,"old":null}
+{"run_id":"1795152163-785403063","line":1028,"new":{"module_name":"aether__tests__floating","snapshot_name":"unfullscreen_to_floating_doesnt_send_extra_configure","metadata":{"source":"src/tests/floating.rs","assertion_line":1028,"expression":"f.client(id).window(&surface).format_recent_configures()"},"snapshot":"size: 100 × 1048, bounds: 1888 × 1048, states: [Activated]"},"old":{"module_name":"aether__tests__floating","metadata":{},"snapshot":"size: 936 × 1048, bounds: 1920 × 1080, states: [Activated]"}}
+{"run_id":"1795152163-785403063","line":692,"new":{"module_name":"aether__tests__floating","snapshot_name":"state_change_doesnt_break_use_window_size","metadata":{"source":"src/tests/floating.rs","assertion_line":692,"expression":"f.client(id).window(&surface).format_recent_configures()"},"snapshot":"size: 500 × 1048, bounds: 1888 × 1048, states: [Activated]"},"old":{"module_name":"aether__tests__floating","metadata":{},"snapshot":"size: 500 × 100, bounds: 1920 × 1080, states: [Activated]"}}
+{"run_id":"1795152163-785403063","line":1172,"new":{"module_name":"aether__tests__floating","snapshot_name":"unfullscreen_to_same_size_windowed_fullscreen_floating-2","metadata":{"source":"src/tests/floating.rs","assertion_line":1172,"expression":"f.client(id).window(&surface).format_recent_configures()"},"snapshot":"size: 100 × 1048, bounds: 1888 × 1048, states: [Activated, Fullscreen]"},"old":{"module_name":"aether__tests__floating","metadata":{},"snapshot":"size: 1920 × 1080, bounds: 1920 × 1080, states: [Activated, Fullscreen]"}}
+{"run_id":"1795152163-785403063","line":1277,"new":{"module_name":"aether__tests__floating","snapshot_name":"unfullscreen_to_same_size_same_bounds_floating-2","metadata":{"source":"src/tests/floating.rs","assertion_line":1277,"expression":"f.client(id).window(&surface).format_recent_configures()"},"snapshot":"size: 100 × 100, bounds: 1920 × 1080, states: [Activated]"},"old":{"module_name":"aether__tests__floating","metadata":{},"snapshot":"size: 1920 × 1080, bounds: 1920 × 1080, states: [Activated]"}}
+{"run_id":"1795152163-785403063","line":1203,"new":null,"old":null}
+{"run_id":"1795152163-785403063","line":1213,"new":null,"old":null}
+{"run_id":"1795152163-785403063","line":1093,"new":{"module_name":"aether__tests__floating","snapshot_name":"unfullscreen_to_same_size_floating-2","metadata":{"source":"src/tests/floating.rs","assertion_line":1093,"expression":"f.client(id).window(&surface).format_recent_configures()"},"snapshot":"size: 100 × 100, bounds: 1920 × 1080, states: [Activated]"},"old":{"module_name":"aether__tests__floating","metadata":{},"snapshot":"size: 1920 × 1080, bounds: 1920 × 1080, states: [Activated]"}}
+{"run_id":"1795152163-785403063","line":1311,"new":null,"old":null}
+{"run_id":"1795152163-785403063","line":1055,"new":{"module_name":"aether__tests__floating","snapshot_name":"unmaximize_to_floating_doesnt_send_extra_configure","metadata":{"source":"src/tests/floating.rs","assertion_line":1055,"expression":"f.client(id).window(&surface).format_recent_configures()"},"snapshot":"size: 100 × 1048, bounds: 1888 × 1048, states: [Activated]"},"old":{"module_name":"aether__tests__floating","metadata":{},"snapshot":"size: 936 × 1048, bounds: 1920 × 1080, states: [Activated]"}}
+{"run_id":"1795152163-785403063","line":1131,"new":{"module_name":"aether__tests__floating","snapshot_name":"unmaximize_to_same_size_floating-2","metadata":{"source":"src/tests/floating.rs","assertion_line":1131,"expression":"f.client(id).window(&surface).format_recent_configures()"},"snapshot":"size: 100 × 100, bounds: 1920 × 1080, states: [Activated]"},"old":{"module_name":"aether__tests__floating","metadata":{},"snapshot":"size: 1920 × 1080, bounds: 1920 × 1080, states: [Activated]"}}
+{"run_id":"1795152163-785403063","line":1223,"new":{"module_name":"aether__tests__floating","snapshot_name":"unmaximize_to_same_size_windowed_fullscreen_floating-3","metadata":{"source":"src/tests/floating.rs","assertion_line":1223,"expression":"f.client(id).window(&surface).format_recent_configures()"},"snapshot":"size: 100 × 100, bounds: 1920 × 1080, states: [Activated, Fullscreen]"},"old":{"module_name":"aether__tests__floating","metadata":{},"snapshot":"size: 1920 × 1080, bounds: 1920 × 1080, states: [Activated, Fullscreen]"}}
+{"run_id":"1795152163-785403063","line":1321,"new":{"module_name":"aether__tests__floating","snapshot_name":"unmaximize_to_same_size_same_bounds_floating-2","metadata":{"source":"src/tests/floating.rs","assertion_line":1321,"expression":"f.client(id).window(&surface).format_recent_configures()"},"snapshot":"size: 100 × 100, bounds: 1920 × 1080, states: [Activated]"},"old":{"module_name":"aether__tests__floating","metadata":{},"snapshot":"size: 1920 × 1080, bounds: 1920 × 1080, states: [Activated]"}}
+{"run_id":"1795152256-419654132","line":854,"new":null,"old":null}
+{"run_id":"1795152256-419654132","line":865,"new":null,"old":null}
+{"run_id":"1795152256-419654132","line":914,"new":null,"old":null}
+{"run_id":"1795152256-419654132","line":925,"new":null,"old":null}
+{"run_id":"1795152256-419654132","line":881,"new":null,"old":null}
+{"run_id":"1795152256-419654132","line":941,"new":null,"old":null}
+{"run_id":"1795152256-419654132","line":969,"new":null,"old":null}
+{"run_id":"1795152256-419654132","line":773,"new":null,"old":null}
+{"run_id":"1795152256-419654132","line":994,"new":null,"old":null}
+{"run_id":"1795152256-419654132","line":527,"new":null,"old":null}
+{"run_id":"1795152256-419654132","line":548,"new":null,"old":null}
+{"run_id":"1795152256-419654132","line":801,"new":null,"old":null}
+{"run_id":"1795152256-419654132","line":811,"new":null,"old":null}
+{"run_id":"1795152256-419654132","line":478,"new":null,"old":null}
+{"run_id":"1795152256-419654132","line":499,"new":null,"old":null}
+{"run_id":"1795152256-419654132","line":821,"new":null,"old":null}
+{"run_id":"1795152256-419654132","line":393,"new":null,"old":null}
+{"run_id":"1795152256-419654132","line":406,"new":null,"old":null}
+{"run_id":"1795152256-419654132","line":424,"new":null,"old":null}
+{"run_id":"1795152256-419654132","line":440,"new":null,"old":null}
+{"run_id":"1795152256-419654132","line":450,"new":null,"old":null}
+{"run_id":"1795152256-419654132","line":1347,"new":null,"old":null}
+{"run_id":"1795152256-419654132","line":585,"new":null,"old":null}
+{"run_id":"1795152256-419654132","line":1362,"new":null,"old":null}
+{"run_id":"1795152256-419654132","line":1373,"new":null,"old":null}
+{"run_id":"1795152256-419654132","line":597,"new":null,"old":null}
+{"run_id":"1795152256-419654132","line":1389,"new":null,"old":null}
+{"run_id":"1795152256-419654132","line":607,"new":null,"old":null}
+{"run_id":"1795152256-419654132","line":139,"new":null,"old":null}
+{"run_id":"1795152256-419654132","line":1406,"new":null,"old":null}
+{"run_id":"1795152256-419654132","line":148,"new":null,"old":null}
+{"run_id":"1795152256-419654132","line":161,"new":null,"old":null}
+{"run_id":"1795152256-419654132","line":172,"new":null,"old":null}
+{"run_id":"1795152256-419654132","line":181,"new":null,"old":null}
+{"run_id":"1795152256-419654132","line":633,"new":null,"old":null}
+{"run_id":"1795152256-419654132","line":291,"new":null,"old":null}
+{"run_id":"1795152256-419654132","line":648,"new":null,"old":null}
+{"run_id":"1795152256-419654132","line":306,"new":null,"old":null}
+{"run_id":"1795152256-419654132","line":662,"new":null,"old":null}
+{"run_id":"1795152256-419654132","line":266,"new":null,"old":null}
+{"run_id":"1795152256-419654132","line":324,"new":null,"old":null}
+{"run_id":"1795152256-419654132","line":350,"new":null,"old":null}
+{"run_id":"1795152256-419654132","line":679,"new":null,"old":null}
+{"run_id":"1795152256-419654132","line":367,"new":null,"old":null}
+{"run_id":"1795152256-419654132","line":207,"new":null,"old":null}
+{"run_id":"1795152256-419654132","line":702,"new":null,"old":null}
+{"run_id":"1795152256-419654132","line":235,"new":null,"old":null}
+{"run_id":"1795152256-419654132","line":715,"new":null,"old":null}
+{"run_id":"1795152256-419654132","line":729,"new":null,"old":null}
+{"run_id":"1795152256-419654132","line":747,"new":null,"old":null}
+{"run_id":"1795152256-419654132","line":101,"new":null,"old":null}
+{"run_id":"1795152256-419654132","line":1093,"new":null,"old":null}
+{"run_id":"1795152256-419654132","line":119,"new":null,"old":null}
+{"run_id":"1795152256-419654132","line":1103,"new":null,"old":null}
+{"run_id":"1795152256-419654132","line":1277,"new":null,"old":null}
+{"run_id":"1795152256-419654132","line":1287,"new":null,"old":null}
+{"run_id":"1795152256-419654132","line":1131,"new":null,"old":null}
+{"run_id":"1795152256-419654132","line":1141,"new":null,"old":null}
+{"run_id":"1795152256-419654132","line":1038,"new":null,"old":null}
+{"run_id":"1795152256-419654132","line":1065,"new":null,"old":null}
+{"run_id":"1795152256-419654132","line":1321,"new":null,"old":null}
+{"run_id":"1795152256-419654132","line":1331,"new":null,"old":null}
+{"run_id":"1795152256-419654132","line":1172,"new":null,"old":null}
+{"run_id":"1795152256-419654132","line":1182,"new":null,"old":null}
+{"run_id":"1795152256-419654132","line":1213,"new":null,"old":null}
+{"run_id":"1795152256-419654132","line":1223,"new":null,"old":null}
+{"run_id":"1795152256-419654132","line":1233,"new":null,"old":null}
+{"run_id":"1795152256-419654132","line":1243,"new":null,"old":null}

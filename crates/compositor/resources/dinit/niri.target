@@ -1,0 +1,6 @@
+type           = internal
+restart        = false
+depends-on:    aether
+waits-for.d:   $XDG_CONFIG_HOME/dinit.d/aether.d/
+waits-for.d:   $HOME/.config/dinit.d/aether.d/
+waits-for.d:   /etc/dinit.d/user/aether.d/
