@@ -320,6 +320,17 @@ impl ResolvedWindowRules {
                 resolved.popups.merge_with(&rule.popups);
             }
 
+            // Older user configs may not include the Settings blur rule from the default config.
+            // Keep the built-in Settings glass effect unless a matching rule explicitly overrides it.
+            if role.app_id.as_deref() == Some("aether-settings") {
+                if resolved.background_effect.blur.is_none() {
+                    resolved.background_effect.blur = Some(true);
+                }
+                if resolved.background_effect.xray.is_none() {
+                    resolved.background_effect.xray = Some(false);
+                }
+            }
+
             resolved.open_on_output = open_on_output.map(|x| x.to_owned());
             resolved.open_on_workspace = open_on_workspace.map(|x| x.to_owned());
         });

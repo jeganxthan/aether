@@ -305,6 +305,15 @@ animations {
     // slowdown 3.0
 }
 
+// Dual-kawase blur settings for background effects.
+blur {
+    // off
+    passes 3
+    offset 3.0
+    noise 0.02
+    saturation 1.5
+}
+
 // Window rules let you adjust behavior for individual windows.
 // Find more information on the wiki:
 // https://aether-wm.github.io/aether/Configuration:-Window-Rules
@@ -314,6 +323,7 @@ window-rule {
     match app-id="aether-settings"
     background-effect {
         blur true
+        xray false
     }
 }
 

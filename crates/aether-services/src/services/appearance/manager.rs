@@ -1,15 +1,11 @@
-use std::{
-    path::PathBuf,
-    sync::Arc,
-};
+use std::{path::PathBuf, sync::Arc};
 
-use crate::theme::ThemeKind;
+use aether_themes::ThemeKind;
 use tokio::sync::RwLock;
 
 use super::config::SettingsConfig;
 
-type ServiceResult<T> =
-    Result<T, Box<dyn std::error::Error + Send + Sync>>;
+type ServiceResult<T> = Result<T, Box<dyn std::error::Error + Send + Sync>>;
 
 pub struct ThemeManager {
     current: RwLock<ThemeKind>,
