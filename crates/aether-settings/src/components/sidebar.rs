@@ -1,10 +1,11 @@
 use gpui_kit::*;
 
-use crate::app::SettingsPage;
-use aether_services::ThemePalette;
+use crate::settings_assets::{SIDEBAR_ETHERNET, SIDEBAR_WIFI, svg_data};
+use crate::{app::SettingsPage, components::search_input::SearchInput};
+use aether_themes::ThemePalette;
 use gpui_kit::component::{
     Icon, IconName,
-    input::{Input, InputState},
+    input::InputState,
     sidebar::{
         Sidebar, SidebarFooter, SidebarGroup, SidebarHeader, SidebarMenu, SidebarMenuItem,
         SidebarToggleButton,
@@ -34,10 +35,10 @@ impl SettingsSidebar {
         let sidebar_border = if niri_blur {
             rgba(palette.sidebar_blur_border)
         } else {
-            rgb(palette.border)
+            rgb(palette.sidebar_border)
         };
 
-        Sidebar::new("settings-sidebar")
+        let sidebar = Sidebar::new("settings-sidebar")
             .w(px(240.0))
             .bg(sidebar_bg)
             .border_color(sidebar_border)
@@ -64,24 +65,21 @@ impl SettingsSidebar {
                                 .flex()
                                 .items_center()
                                 .gap_2()
-                                .child(
-                                    div()
-                                        .flex_1()
-                                        .child(
-                                            Input::new(&search_input)
-                                                .prefix(IconName::Search)
-                                                .bg(if niri_blur {
-                                                    rgba(0xffffff0d)
-                                                } else {
-                                                    rgb(palette.content_background)
-                                                })
-                                                .border_color(if niri_blur {
-                                                    rgba(palette.sidebar_blur_border)
-                                                } else {
-                                                    rgb(palette.border)
-                                                }),
-                                        ),
-                                )
+                                .child(div().flex_1().child(if niri_blur {
+                                    SearchInput::render_translucent(
+                                        search_input,
+                                        Some(180.0), // Width
+                                        palette,
+                                    )
+                                    .into_any_element()
+                                } else {
+                                    SearchInput::render(
+                                        search_input,
+                                        Some(180.0), // Width
+                                        palette,
+                                    )
+                                    .into_any_element()
+                                }))
                                 .child(
                                     SidebarToggleButton::new()
                                         .collapsed(collapsed)
@@ -95,7 +93,13 @@ impl SettingsSidebar {
                     SidebarMenu::new()
                         .child(
                             SidebarMenuItem::new("Appearance")
-                                .icon(IconName::Palette)
+                                .icon(Icon::new(IconName::Palette).text_color(rgb(
+                                    if current_page == SettingsPage::Appearance {
+                                        palette.sidebar_active_foreground
+                                    } else {
+                                        palette.sidebar_foreground
+                                    },
+                                )))
                                 .active(current_page == SettingsPage::Appearance)
                                 .on_click({
                                     let on_navigate = Arc::clone(&on_navigate);
@@ -107,7 +111,13 @@ impl SettingsSidebar {
                         )
                         .child(
                             SidebarMenuItem::new("Display")
-                                .icon(IconName::Frame)
+                                .icon(Icon::new(IconName::Frame).text_color(rgb(
+                                    if current_page == SettingsPage::Display {
+                                        palette.sidebar_active_foreground
+                                    } else {
+                                        palette.sidebar_foreground
+                                    },
+                                )))
                                 .active(current_page == SettingsPage::Display)
                                 .on_click({
                                     let on_navigate = Arc::clone(&on_navigate);
@@ -118,10 +128,25 @@ impl SettingsSidebar {
                         )
                         .child(
                             SidebarMenuItem::new("Network")
-                                .icon(IconName::Network)
+                                .icon(
+                                    Icon::new(IconName::Network)
+                                        .text_color(rgb(palette.sidebar_foreground)),
+                                )
                                 .children([
                                     SidebarMenuItem::new("Wi-Fi")
-                                        .icon(Icon::new(assets::IconName::Wifi))
+                                        .icon(
+                                            Icon::default()
+                                                .data(svg_data(SIDEBAR_WIFI))
+                                                .w(px(16.0))
+                                                .h(px(16.0))
+                                                .text_color(rgb(
+                                                    if current_page == SettingsPage::Wifi {
+                                                        palette.sidebar_active_foreground
+                                                    } else {
+                                                        palette.sidebar_foreground
+                                                    },
+                                                )),
+                                        )
                                         .active(current_page == SettingsPage::Wifi)
                                         .on_click({
                                             let on_navigate = Arc::clone(&on_navigate);
@@ -130,7 +155,19 @@ impl SettingsSidebar {
                                             }
                                         }),
                                     SidebarMenuItem::new("Ethernet")
-                                        .icon(Icon::new(assets::IconName::EthernetPort))
+                                        .icon(
+                                            Icon::default()
+                                                .data(svg_data(SIDEBAR_ETHERNET))
+                                                .w(px(16.0))
+                                                .h(px(16.0))
+                                                .text_color(rgb(
+                                                    if current_page == SettingsPage::Ethernet {
+                                                        palette.sidebar_active_foreground
+                                                    } else {
+                                                        palette.sidebar_foreground
+                                                    },
+                                                )),
+                                        )
                                         .active(current_page == SettingsPage::Ethernet)
                                         .on_click({
                                             let on_navigate = Arc::clone(&on_navigate);
@@ -155,6 +192,17 @@ impl SettingsSidebar {
                             div().child("User Profile")
                         }),
                 ),
-            )
+            );
+
+        if niri_blur {
+            div()
+                .h_full()
+                .flex_shrink_0()
+                .bg(rgba(0x00000000))
+                .child(sidebar)
+                .into_any_element()
+        } else {
+            sidebar.into_any_element()
+        }
     }
 }

@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use crate::theme::ThemeKind;
+use aether_themes::ThemeKind;
 use zbus::{interface, object_server::SignalEmitter};
 
 use super::manager::ThemeManager;

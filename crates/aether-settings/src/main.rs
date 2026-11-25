@@ -1,9 +1,8 @@
 mod app;
 mod components;
 mod pages;
+mod services;
 mod settings_assets;
-mod theme;
-use aether_services::ThemeService;
 use gpui_kit::component::input::InputState;
 use gpui_kit::*;
 
@@ -14,10 +13,9 @@ fn main() {
         .with_assets(settings_assets::SettingsAssets)
         .run(move |cx| {
             init(cx);
-            ThemeService::initialize(cx);
-            theme::init(cx);
+            aether_themes::init(cx);
 
-            open_window(
+            cx.open_window(
                 WindowOptions {
                     app_id: Some("aether-settings".to_string()),
                     window_bounds: Some(WindowBounds::Windowed(Bounds {
@@ -31,12 +29,32 @@ fn main() {
                     },
                     ..Default::default()
                 },
-                cx,
                 |window, cx| {
                     let search_input =
                         cx.new(|cx| InputState::new(window, cx).placeholder("Search settings"));
 
-                    cx.new(|cx| app::SettingsApp::new(search_input, niri_blur, cx))
+                    let wifi_search_input =
+                        cx.new(|cx| InputState::new(window, cx).placeholder("Search networks..."));
+
+                    let view = cx.new(|cx| {
+                        app::SettingsApp::new(
+                            app::SettingsAppConfig {
+                                search_input,
+                                wifi_search_input,
+                                niri_blur,
+                            },
+                            cx,
+                        )
+                    });
+
+                    cx.new(|cx| {
+                        let root = base::Root::new(view, window, cx);
+                        if niri_blur {
+                            root.bg(rgba(0x00000000))
+                        } else {
+                            root
+                        }
+                    })
                 },
             )
             .expect("Failed to open Aether Settings");

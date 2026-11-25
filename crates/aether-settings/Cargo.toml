@@ -5,5 +5,12 @@ edition = "2024"
 
 [dependencies]
 aether-services = { path = "../aether-services" }
+aether-themes = { path = "../aether-themes" }
 gpui-kit = "0.10.0"
 serde_json = "1.0"
+zbus = "6.4.0"
+tokio = { version = "1", features = ["full"] }
+futures-util = "0.3"
+qrcode = "0.14"
+futures = "0.3"
+futures-timer = "3"
