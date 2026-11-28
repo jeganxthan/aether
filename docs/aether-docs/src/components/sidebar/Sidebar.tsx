@@ -74,7 +74,7 @@ export default function Sidebar({ open, onClose }: SidebarProps) {
 
       <div className="shrink-0 border-t border-line px-5 py-4">
         <a
-          href="https://github.com/jeganxthan/aether.git"
+          href="https://github.com/jeganxthan/aether"
           target="_blank"
           rel="noreferrer"
           className="flex items-center justify-between text-[11px] text-muted transition-colors hover:text-emphasis"

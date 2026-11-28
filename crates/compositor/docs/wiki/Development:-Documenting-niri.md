@@ -1,7 +1,7 @@
 aether's documentation files are found in `docs/wiki/` and should be viewable and browsable in at least three systems:
 
 - The GitHub repo's markdown file preview
-- [The GitHub repo's wiki](https://github.com/aether-wm/aether/wiki)
+- [The GitHub repo's wiki](https://github.com/jeganxthan/aether/wiki)
 - [The documentation site](https://aether-wm.github.io/aether/)
 
 ## The GitHub repo's wiki

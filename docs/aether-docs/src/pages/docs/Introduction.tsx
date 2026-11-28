@@ -1,5 +1,3 @@
-import { Link } from "react-router-dom";
-
 import DocPage from "../../components/docs/DocPage";
 import { FeatureGrid, Section } from "../../components/docs/Content";
 

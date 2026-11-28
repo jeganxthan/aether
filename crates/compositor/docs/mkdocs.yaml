@@ -1,7 +1,7 @@
 site_name: aether
 docs_dir: wiki
 site_url: https://aether-wm.github.io/aether
-repo_url: https://github.com/aether-wm/aether
+repo_url: https://github.com/jeganxthan/aether
 edit_uri: edit/main/docs/wiki/
 use_directory_urls: false
 

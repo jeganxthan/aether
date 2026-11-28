@@ -353,7 +353,7 @@ pub struct Aether {
     // verified that a black single-pixel-buffer background lets the foreground surface to be
     // unredirected.
     //
-    // https://github.com/aether-wm/aether/issues/619
+    // https://github.com/jeganxthan/aether/issues/619
     #[cfg(test)]
     pub single_pixel_buffer_state: SinglePixelBufferState,
 

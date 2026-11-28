@@ -4,7 +4,7 @@ First, for creating a aether package, see the [Packaging](./Packaging-aether.md)
 ### Configuration
 
 Aether will load configuration from `$XDG_CONFIG_HOME/aether/config.kdl` or `~/.config/aether/config.kdl`, falling back to `/etc/aether/config.kdl`.
-If both of these files are missing, aether will create `$XDG_CONFIG_HOME/aether/config.kdl` with the contents of [the default configuration file](https://github.com/aether-wm/aether/blob/main/resources/default-config.kdl), which are embedded into the aether binary at build time.
+If both of these files are missing, aether will create `$XDG_CONFIG_HOME/aether/config.kdl` with the contents of [the default configuration file](https://github.com/jeganxthan/aether/blob/main/resources/default-config.kdl), which are embedded into the aether binary at build time.
 
 This means that you can customize your distribution defaults by creating `/etc/aether/config.kdl`.
 When this file is present, aether *will not* automatically create a config at `~/.config/aether/`, so you'll need to direct your users how to do it themselves.
@@ -36,7 +36,7 @@ Make sure your system installer sets the keyboard layout via systemd-localed, an
 ### Autostart
 
 Aether works with the normal systemd autostart.
-The default [aether.service](https://github.com/aether-wm/aether/blob/main/resources/aether.service) brings up `graphical-session.target` as well as `xdg-desktop-autostart.target`.
+The default [aether.service](https://github.com/jeganxthan/aether/blob/main/resources/aether.service) brings up `graphical-session.target` as well as `xdg-desktop-autostart.target`.
 
 To make a program run at aether startup without editing the aether config, you can either link its .desktop to `~/.config/autostart/`, or use a .service file with `WantedBy=graphical-session.target`.
 See the [example systemd setup](./Example-systemd-Setup.md) page for some examples.

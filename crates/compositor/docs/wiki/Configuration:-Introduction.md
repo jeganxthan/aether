@@ -19,7 +19,7 @@ You can find documentation for various sections of the config on these wiki page
 ### Loading
 
 Aether will load configuration from `$XDG_CONFIG_HOME/aether/config.kdl` or `~/.config/aether/config.kdl`, falling back to `/etc/aether/config.kdl`.
-If both of these files are missing, aether will create `$XDG_CONFIG_HOME/aether/config.kdl` with the contents of [the default configuration file](https://github.com/aether-wm/aether/blob/main/resources/default-config.kdl), which are embedded into the aether binary at build time.
+If both of these files are missing, aether will create `$XDG_CONFIG_HOME/aether/config.kdl` with the contents of [the default configuration file](https://github.com/jeganxthan/aether/blob/main/resources/default-config.kdl), which are embedded into the aether binary at build time.
 Please use the default configuration file as the starting point for your custom configuration.
 
 The configuration is live-reloaded.

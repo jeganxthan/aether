@@ -169,7 +169,7 @@ impl State {
             // 2) Same-layer exclusive layer surfaces are already preferred to on-demand surfaces in
             //    update_keyboard_focus(), so we don't need to check for that here.
             //
-            // https://github.com/aether-wm/aether/issues/641
+            // https://github.com/jeganxthan/aether/issues/641
             let on_demand = layer.cached_state().keyboard_interactivity
                 == wlr_layer::KeyboardInteractivity::OnDemand;
             if was_unmapped && on_demand {
