@@ -91,7 +91,7 @@ impl VirtualKeyboardHandler for State {
                 // rebuild it cleanly for all possible layouts (e.g., `grp:alt_shift_toggle`,
                 // layouts with multi-level modifier keys) without tracking the exact sequence the
                 // modifiers were pressed in (see
-                // https://github.com/aether-wm/aether/pull/4548#discussion_r4237056727).
+                // https://github.com/jeganxthan/aether/pull/4548#discussion_r4237056727).
                 //
                 // Not resetting the modifiers means that:
                 //

@@ -1,6 +1,6 @@
 # aether-ipc
 
-Types and helpers for interfacing with the [aether](https://github.com/aether-wm/aether) Wayland compositor.
+Types and helpers for interfacing with the [aether](https://github.com/jeganxthan/aether) Wayland compositor.
 
 ## Backwards compatibility
 

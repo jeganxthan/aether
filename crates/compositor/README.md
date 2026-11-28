@@ -2,12 +2,12 @@
 <p align="center">A scrollable-tiling Wayland compositor.</p>
 <p align="center">
     <a href="https://matrix.to/#/#aether:matrix.org"><img alt="Matrix" src="https://img.shields.io/badge/matrix-%23niri-blue?logo=matrix"></a>
-    <a href="https://github.com/aether-wm/aether/blob/main/LICENSE"><img alt="GitHub License" src="https://img.shields.io/github/license/aether-wm/aether"></a>
-    <a href="https://github.com/aether-wm/aether/releases"><img alt="GitHub Release" src="https://img.shields.io/github/v/release/aether-wm/aether?logo=github"></a>
+    <a href="https://github.com/jeganxthan/aether/blob/main/LICENSE"><img alt="GitHub License" src="https://img.shields.io/github/license/aether-wm/aether"></a>
+    <a href="https://github.com/jeganxthan/aether/releases"><img alt="GitHub Release" src="https://img.shields.io/github/v/release/aether-wm/aether?logo=github"></a>
 </p>
 
 <p align="center">
-    <a href="https://aether-wm.github.io/aether/Getting-Started.html">Getting Started</a> | <a href="https://aether-wm.github.io/aether/Configuration%3A-Introduction.html">Configuration</a> | <a href="https://github.com/aether-wm/aether/discussions/325">Setup&nbsp;Showcase</a>
+    <a href="https://aether-wm.github.io/aether/Getting-Started.html">Getting Started</a> | <a href="https://aether-wm.github.io/aether/Configuration%3A-Introduction.html">Configuration</a> | <a href="https://github.com/jeganxthan/aether/discussions/325">Setup&nbsp;Showcase</a>
 </p>
 
 <img width="1280" height="720" alt="aether with a few windows open" src="https://github.com/user-attachments/assets/dea5909e-1859-4aaa-9d88-d37f9663e00b" />
@@ -35,18 +35,18 @@ When a monitor disconnects, its workspaces will move to another monitor, but upo
 - Monitor and window screencasting through xdg-desktop-portal-gnome
     - You can [block out](https://aether-wm.github.io/aether/Configuration%3A-Window-Rules.html#block-out-from) sensitive windows from screencasts
     - [Dynamic cast target](https://aether-wm.github.io/aether/Screencasting.html#dynamic-screencast-target) that can change what it shows on the go
-- [Touchpad](https://github.com/aether-wm/aether/assets/1794388/946a910e-9bec-4cd1-a923-4a9421707515) and [mouse](https://github.com/aether-wm/aether/assets/1794388/8464e65d-4bf2-44fa-8c8e-5883355bd000) gestures
+- [Touchpad](https://github.com/jeganxthan/aether/assets/1794388/946a910e-9bec-4cd1-a923-4a9421707515) and [mouse](https://github.com/jeganxthan/aether/assets/1794388/8464e65d-4bf2-44fa-8c8e-5883355bd000) gestures
 - Group windows into [tabs](https://aether-wm.github.io/aether/Tabs.html)
 - Configurable layout: gaps, borders, struts, window sizes
 - [Gradient borders](https://aether-wm.github.io/aether/Configuration%3A-Layout.html#gradients) with Oklab and Oklch support
 - [Background blur](https://aether-wm.github.io/aether/Window-Effects.html) for windows and layer-shell surfaces
-- [Animations](https://github.com/aether-wm/aether/assets/1794388/ce178da2-af9e-4c51-876f-8709c241d95e) with support for [custom shaders](https://github.com/aether-wm/aether/assets/1794388/27a238d6-0a22-4692-b794-30dc7a626fad)
+- [Animations](https://github.com/jeganxthan/aether/assets/1794388/ce178da2-af9e-4c51-876f-8709c241d95e) with support for [custom shaders](https://github.com/jeganxthan/aether/assets/1794388/27a238d6-0a22-4692-b794-30dc7a626fad)
 - Live-reloading config
 - Works with [screen readers](https://aether-wm.github.io/aether/Accessibility.html)
 
 ## Video Demo
 
-https://github.com/aether-wm/aether/assets/1794388/bce834b0-f205-434e-a027-b373495f9729
+https://github.com/jeganxthan/aether/assets/1794388/bce834b0-f205-434e-a027-b373495f9729
 
 Also check out these videos that showcase a lot of the aether functionality:
 
@@ -103,7 +103,7 @@ The talk is in Russian, but I prepared full English subtitles that you can find 
 ## Contributing
 
 If you'd like to help with aether, there are plenty of both coding- and non-coding-related ways to do so.
-See [CONTRIBUTING.md](https://github.com/aether-wm/aether/blob/main/CONTRIBUTING.md) for an overview.
+See [CONTRIBUTING.md](https://github.com/jeganxthan/aether/blob/main/CONTRIBUTING.md) for an overview.
 
 ## Inspiration
 

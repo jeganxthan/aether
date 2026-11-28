@@ -79,7 +79,7 @@ export default function DocsLayout() {
           <div className="ml-auto flex items-center gap-4">
             <span className="hidden font-mono text-[11px] text-faint md:inline">v0.1.0</span>
             <a
-              href="https://github.com/aether-wm/aether"
+              href="https://github.com/jeganxthan/aether"
               target="_blank"
               rel="noreferrer"
               className="inline-flex items-center gap-1.5 text-xs text-muted transition-colors hover:text-emphasis"

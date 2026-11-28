@@ -689,7 +689,7 @@ impl Tty {
                     let device = self.devices.get_mut(&node).unwrap();
 
                     // Someone on an old device hit what seems to be a driver bug without this:
-                    // https://github.com/aether-wm/aether/issues/3048
+                    // https://github.com/jeganxthan/aether/issues/3048
                     let force_disable = self
                         .config
                         .borrow()
@@ -1752,8 +1752,8 @@ impl Tty {
                 // This is an error!() because it shouldn't happen, but on some systems it somehow
                 // does. Kernel sending rogue vblank events?
                 //
-                // https://github.com/aether-wm/aether/issues/556
-                // https://github.com/aether-wm/aether/issues/615
+                // https://github.com/jeganxthan/aether/issues/556
+                // https://github.com/jeganxthan/aether/issues/615
                 error!(
                     "unexpected redraw state for output {name} (should be WaitingForVBlank); \
                      can happen when resuming from sleep or powering on monitors: {state:?}"
@@ -1854,7 +1854,7 @@ impl Tty {
                 return;
             }
             // Unexpected states, but let's not crash the compositor.
-            // https://github.com/aether-wm/aether/issues/4781
+            // https://github.com/jeganxthan/aether/issues/4781
             state @ (RedrawState::Idle
             | RedrawState::Queued
             | RedrawState::WaitingForVBlank { .. }) => {
