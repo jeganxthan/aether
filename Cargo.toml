@@ -2,6 +2,8 @@
 name = "Aether"
 version = "0.1.0"
 edition = "2024"
+license = "Apache-2.0"
+authors = ["Jeganathan"]
 
 [dependencies]
 gpui = { git = "https://github.com/zed-industries/zed.git", rev = "b51ffab0153f3372b71d1bd565d48d5203fefe6a", default-features = false, features = [
@@ -19,3 +21,9 @@ members = [
     "crates/aether-shell"
 ]
 exclude = ["crates/compositor"]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+license = "Apache-2.0"
+authors = ["Jeganathan"]

@@ -1,7 +1,10 @@
 [package]
 name = "aether-services"
-version = "0.1.0"
-edition = "2024"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+
 
 [dependencies]
 aether-themes = { path = "../aether-themes" }
@@ -12,3 +15,5 @@ toml = "0.8"
 nmrs = "3.5.13"
 async-process = "2.5.0"
 futures-lite = "2"
+
+

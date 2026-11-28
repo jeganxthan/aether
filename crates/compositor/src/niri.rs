@@ -3690,6 +3690,34 @@ impl Aether {
         self.window_under(pos)
     }
 
+    pub fn titlebar_under_cursor(
+        &self,
+    ) -> Option<(smithay::desktop::Window, Point<f64, Logical>)> {
+        if self.is_locked()
+            || self.layout.is_overview_open()
+            || self.screenshot_ui.is_open()
+            || self.window_mru_ui.is_open()
+            || self.exit_confirm_dialog.is_open()
+        {
+            return None;
+        }
+
+        let pos = self.seat.get_pointer()?.current_location();
+        let (output, pos_within_output) = self.output_under(pos)?;
+        if self.is_sticky_obscured_under(output, pos_within_output)
+            || self.is_layout_obscured_under(output, pos_within_output)
+        {
+            return None;
+        }
+
+        match self.layout.window_under(output, pos_within_output)? {
+            (mapped, HitType::TitleBar { point_in_controls }) => {
+                Some((mapped.window.clone(), point_in_controls))
+            }
+            _ => None,
+        }
+    }
+
     /// Returns contents under the given point.
     ///
     /// We don't have a proper global space for all windows, so this function converts window

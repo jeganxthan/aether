@@ -47,3 +47,9 @@ fn main() {
         .expect("failed to open Aether layer-shell window");
     });
 }
+
+
+// cd /home/jegan/Desktop/aether &&
+// sudo install -Dm755 crates/compositor/target/release/aether /usr/local/bin/aether &&
+// cmp -s crates/compositor/target/release/aether /usr/local/bin/aether &&
+// echo "Latest compositor installed and verified"

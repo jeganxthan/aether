@@ -639,7 +639,8 @@ impl XdgShellHandler for State {
                             state.states.unset(xdg_toplevel::State::Maximized);
                         });
 
-                        let is_floating = rules.compute_open_floating(&toplevel);
+                        let is_floating =
+                            rules.compute_open_floating(&toplevel, ws.default_open_floating());
                         let configure_width = if is_floating {
                             *floating_width
                         } else if *is_full_width {
@@ -849,7 +850,8 @@ impl XdgShellHandler for State {
                             }
                         });
 
-                        let is_floating = rules.compute_open_floating(&toplevel);
+                        let is_floating =
+                            rules.compute_open_floating(&toplevel, ws.default_open_floating());
                         let configure_width = if is_floating {
                             *floating_width
                         } else if *is_full_width {
@@ -963,6 +965,7 @@ impl XdgShellHandler for State {
 
     fn title_changed(&mut self, toplevel: ToplevelSurface) {
         self.update_window_rules(&toplevel);
+        self.aether.queue_redraw_all();
     }
 
     fn parent_changed(&mut self, toplevel: ToplevelSurface) {
@@ -1168,7 +1171,6 @@ impl State {
         let mut height = None;
         let mut floating_height = None;
         let is_full_width = rules.open_maximized.unwrap_or(false);
-        let is_floating = rules.compute_open_floating(toplevel);
 
         // Tell the surface the preferred size and bounds for its likely output.
         let ws = rules
@@ -1179,6 +1181,8 @@ impl State {
                 mon.map(|mon| mon.active_workspace_ref())
                     .or_else(|| self.aether.layout.active_workspace())
             });
+        let default_floating = ws.map_or(true, |ws| ws.default_open_floating());
+        let is_floating = rules.compute_open_floating(toplevel, default_floating);
 
         let mut is_pending_maximized = false;
         if let Some(ws) = ws {

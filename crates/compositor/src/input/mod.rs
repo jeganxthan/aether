@@ -50,13 +50,14 @@ use self::pick_color_grab::PickColorGrab;
 use self::pick_window_grab::PickWindowGrab;
 use self::resize_grab::ResizeGrab;
 use self::spatial_movement_grab::SpatialMovementGrab;
+use crate::aether::{Aether, CastTarget, PointerVisibility, State};
 #[cfg(feature = "dbus")]
 use crate::dbus::freedesktop_a11y::KbMonBlock;
 #[cfg(feature = "dbus")]
 use crate::dbus::gnome_shell::GlobalShortcutsPortalBinds;
 use crate::layout::scrolling::ScrollDirection;
+use crate::layout::titlebar;
 use crate::layout::{ActivateWindow, LayoutElement as _};
-use crate::aether::{CastTarget, Aether, PointerVisibility, State};
 use crate::ui::mru::{WindowMru, WindowMruUi};
 use crate::ui::screenshot_ui::ScreenshotUi;
 use crate::utils::spawning::{spawn, spawn_sh};
@@ -3415,6 +3416,49 @@ impl State {
 
                     // Don't activate the window under the cursor to avoid unnecessary
                     // scrolling when e.g. Mod+MMB clicking on a partially off-screen window.
+                    return;
+                }
+            }
+
+            if button == Some(MouseButton::Left) && !pointer.is_grabbed() && !mod_down {
+                if let Some((window, point_in_controls)) = self.aether.titlebar_under_cursor() {
+                    let window_for_action = window.clone();
+                    self.aether.layout.activate_window(&window);
+
+                    if let Some(control) = titlebar::hit_test(point_in_controls) {
+                        self.aether.suppressed_buttons.insert(button_code);
+                        match control {
+                            titlebar::Control::Close => {
+                                if let Some(mapped) = self.aether.layout.focus() {
+                                    mapped.toplevel().send_close();
+                                }
+                            }
+                            titlebar::Control::Minimize => {}
+                            titlebar::Control::Maximize => {
+                                self.aether.layout.toggle_maximized(&window_for_action);
+                                self.aether.layout.activate_window(&window_for_action);
+                            }
+                        }
+                        self.aether.queue_redraw_all();
+                        self.update_pointer_contents();
+                        return;
+                    }
+
+                    let location = pointer.current_location();
+                    let start_data = AnyStartData::Pointer(PointerGrabStartData {
+                        focus: None,
+                        button: button_code,
+                        location,
+                    });
+                    if let Some(grab) =
+                        MoveGrab::new(self, start_data, window, false, Some(CursorIcon::Grabbing))
+                    {
+                        pointer.set_grab(self, grab, serial, Focus::Clear);
+                        self.aether
+                            .cursor_manager
+                            .set_cursor_image(CursorImageStatus::Named(CursorIcon::Grabbing));
+                    }
+                    self.aether.queue_redraw_all();
                     return;
                 }
             }

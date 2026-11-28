@@ -1,4 +1,5 @@
 use core::f64;
+use std::cell::RefCell;
 use std::rc::Rc;
 
 use niri_config::utils::MergeWith as _;
@@ -11,6 +12,7 @@ use smithay::utils::{Logical, Point, Rectangle, Scale, Size};
 use super::focus_ring::{FocusRing, FocusRingRenderElement};
 use super::opening_window::{OpenAnimation, OpeningWindowRenderElement};
 use super::shadow::Shadow;
+use super::titlebar::{self, TitleBar};
 use super::{
     HitType, LayoutElement, LayoutElementRenderElement, LayoutElementRenderSnapshot, Options,
     SizeFrac, RESIZE_ANIMATION_THRESHOLD,
@@ -23,6 +25,7 @@ use crate::render_helpers::border::BorderRenderElement;
 use crate::render_helpers::clipped_surface::{ClippedSurfaceRenderElement, RoundedCornerDamage};
 use crate::render_helpers::damage::ExtraDamage;
 use crate::render_helpers::offscreen::{OffscreenBuffer, OffscreenRenderElement};
+use crate::render_helpers::primary_gpu_texture::PrimaryGpuTextureRenderElement;
 use crate::render_helpers::renderer::NiriRenderer;
 use crate::render_helpers::resize::ResizeRenderElement;
 use crate::render_helpers::shadow::ShadowRenderElement;
@@ -58,6 +61,10 @@ pub struct Tile<W: LayoutElement> {
 
     /// The backdrop for fullscreen windows.
     fullscreen_backdrop: SolidColorBuffer,
+
+    /// Cached compositor-drawn title bar texture.
+    titlebar: RefCell<TitleBar>,
+    titlebar_active: bool,
 
     /// Whether the tile should float upon unfullscreening.
     pub(super) restore_to_floating: bool,
@@ -133,6 +140,7 @@ niri_render_elements! {
         Offscreen = OffscreenRenderElement,
         ExtraDamage = ExtraDamage,
         BackgroundEffect = BackgroundEffectElement,
+        TitleBar = PrimaryGpuTextureRenderElement,
     }
 }
 
@@ -200,6 +208,8 @@ impl<W: LayoutElement> Tile<W> {
             shadow: Shadow::new(shadow_config),
             sizing_mode,
             fullscreen_backdrop: SolidColorBuffer::new((0., 0.), fullscreen_backdrop_color),
+            titlebar: RefCell::new(TitleBar::default()),
+            titlebar_active: false,
             restore_to_floating: false,
             floating_window_size: None,
             floating_pos: None,
@@ -295,6 +305,9 @@ impl<W: LayoutElement> Tile<W> {
                     tile_size.w += width * 2.;
                     tile_size.h += width * 2.;
                 }
+                if !prev_sizing_mode.is_fullscreen() && self.window.has_ssd() {
+                    tile_size.h += titlebar::HEIGHT;
+                }
 
                 tile_size.w = tile_size_from.w + (tile_size.w - tile_size_from.w) * val;
                 tile_size.h = tile_size_from.h + (tile_size.h - tile_size_from.h) * val;
@@ -333,6 +346,9 @@ impl<W: LayoutElement> Tile<W> {
                     let width = self.border.width();
                     tile_size.w += width * 2.;
                     tile_size.h += width * 2.;
+                }
+                if !prev_sizing_mode.is_fullscreen() && self.window.has_ssd() {
+                    tile_size.h += titlebar::HEIGHT;
                 }
 
                 let fullscreen_from = if prev_sizing_mode.is_fullscreen() {
@@ -411,10 +427,14 @@ impl<W: LayoutElement> Tile<W> {
         self.shadow.update_config(shadow_config);
 
         let window_size = self.window_size();
-        let radius = self
+        let mut radius = self
             .window
             .geometry_corner_radius()
             .fit_to(window_size.w as f32, window_size.h as f32);
+        if self.titlebar_height() > 0. {
+            radius.top_left = 0.;
+            radius.top_right = 0.;
+        }
         self.rounded_corner_damage.set_corner_radius(radius);
     }
 
@@ -475,6 +495,7 @@ impl<W: LayoutElement> Tile<W> {
     }
 
     pub fn update_render_elements(&mut self, is_active: bool, view_rect: Rectangle<f64, Logical>) {
+        self.titlebar_active = is_active;
         let rules = self.window.rules();
         let animated_tile_size = self.animated_tile_size();
         let expanded_progress = self.expanded_progress();
@@ -759,6 +780,18 @@ impl<W: LayoutElement> Tile<W> {
         Some(self.border.width())
     }
 
+    fn titlebar_height(&self) -> f64 {
+        self.titlebar_height_for(self.sizing_mode)
+    }
+
+    fn titlebar_height_for(&self, mode: SizingMode) -> f64 {
+        if mode.is_fullscreen() || !self.window.has_ssd() {
+            0.
+        } else {
+            titlebar::HEIGHT
+        }
+    }
+
     fn visual_border_width(&self) -> Option<f64> {
         if self.border.is_off() {
             return None;
@@ -794,7 +827,8 @@ impl<W: LayoutElement> Tile<W> {
         // - During animations, the window remains centered within the tile; this is important for
         //   the to/from fullscreen animation.
         loc.x += (target_size.w - window_size.w) / 2.;
-        loc.y += (target_size.h - window_size.h) / 2.;
+        loc.y +=
+            (target_size.h - window_size.h - self.titlebar_height()) / 2. + self.titlebar_height();
 
         // Round to physical pixels.
         loc = loc
@@ -819,6 +853,7 @@ impl<W: LayoutElement> Tile<W> {
             size.w += width * 2.;
             size.h += width * 2.;
         }
+        size.h += self.titlebar_height();
 
         size
     }
@@ -838,6 +873,7 @@ impl<W: LayoutElement> Tile<W> {
             size.w += width * 2.;
             size.h += width * 2.;
         }
+        size.h += self.titlebar_height();
 
         size
     }
@@ -927,6 +963,17 @@ impl<W: LayoutElement> Tile<W> {
         let offset = self.bob_offset();
         let point = point - offset;
 
+        let titlebar_height = self.titlebar_height();
+        let border_width = self.effective_border_width().unwrap_or(0.);
+        if titlebar_height > 0.
+            && point.y >= border_width
+            && point.y < border_width + titlebar_height
+        {
+            return Some(HitType::TitleBar {
+                point_in_controls: point - Point::from((border_width, border_width)),
+            });
+        }
+
         if self.is_in_input_region(point) {
             let win_pos = self.buf_loc() + offset;
             Some(HitType::Input { win_pos })
@@ -951,6 +998,7 @@ impl<W: LayoutElement> Tile<W> {
             size.w = f64::max(1., size.w - width * 2.);
             size.h = f64::max(1., size.h - width * 2.);
         }
+        size.h = f64::max(1., size.h - self.titlebar_height_for(SizingMode::Normal));
 
         // The size request has to be i32 unfortunately, due to Wayland. We floor here instead of
         // round to avoid situations where proportionally-sized columns don't fit on the screen
@@ -972,11 +1020,12 @@ impl<W: LayoutElement> Tile<W> {
     }
 
     pub fn tile_height_for_window_height(&self, size: f64) -> f64 {
-        if self.border.is_off() {
-            size
+        let border = if self.border.is_off() {
+            0.
         } else {
-            size + self.border.width() * 2.
-        }
+            self.border.width() * 2.
+        };
+        size + border + self.titlebar_height_for(SizingMode::Normal)
     }
 
     pub fn window_width_for_tile_width(&self, size: f64) -> f64 {
@@ -988,19 +1037,21 @@ impl<W: LayoutElement> Tile<W> {
     }
 
     pub fn window_height_for_tile_height(&self, size: f64) -> f64 {
-        if self.border.is_off() {
-            size
+        let border = if self.border.is_off() {
+            0.
         } else {
-            size - self.border.width() * 2.
-        }
+            self.border.width() * 2.
+        };
+        (size - border - self.titlebar_height_for(SizingMode::Normal)).max(1.)
     }
 
     pub fn request_maximized(
         &mut self,
-        size: Size<f64, Logical>,
+        mut size: Size<f64, Logical>,
         animate: bool,
         transaction: Option<Transaction>,
     ) {
+        size.h = f64::max(1., size.h - self.titlebar_height_for(SizingMode::Maximized));
         self.window.request_size(
             size.to_i32_round(),
             SizingMode::Maximized,
@@ -1020,6 +1071,7 @@ impl<W: LayoutElement> Tile<W> {
 
     pub fn min_size_nonfullscreen(&self) -> Size<f64, Logical> {
         let mut size = self.window.min_size().to_f64();
+        size.h += self.titlebar_height_for(SizingMode::Normal);
 
         // Can't go through effective_border_width() because we might be fullscreen.
         if !self.border.is_off() {
@@ -1111,10 +1163,14 @@ impl<W: LayoutElement> Tile<W> {
         // Clip to geometry including during the fullscreen animation to help with buggy clients
         // that submit a full-sized buffer before acking the fullscreen state (Firefox).
         let clip_to_geometry = fullscreen_progress < 1. && rules.clip_to_geometry == Some(true);
-        let radius = self
+        let mut radius = self
             .window
             .geometry_corner_radius()
             .scaled_by(1. - expanded_progress as f32);
+        if self.titlebar_height() > 0. {
+            radius.top_left = 0.;
+            radius.top_right = 0.;
+        }
 
         // Popups go on top, whether it's resize or not.
         self.window.render_popups(
@@ -1278,6 +1334,31 @@ impl<W: LayoutElement> Tile<W> {
                 .render_normal(ctx.r(), window_render_loc, scale, win_alpha, &mut |elem| {
                     push(clip(elem))
                 });
+        }
+
+        let titlebar_height = self.titlebar_height();
+        if titlebar_height > 0. {
+            let border_width = self.effective_border_width().unwrap_or(0.);
+            let titlebar_location = location + Point::from((border_width, border_width));
+            let titlebar_width = (self.animated_tile_size().w - border_width * 2.).max(1.);
+            let corner_radius = self
+                .window
+                .geometry_corner_radius()
+                .scaled_by(1. - expanded_progress as f32)
+                .expanded_by(border_width as f32);
+            let title = self.window.title().unwrap_or_default();
+            match self.titlebar.borrow_mut().render(
+                ctx.as_gles().renderer,
+                &title,
+                self.titlebar_active,
+                titlebar_width,
+                self.scale,
+                corner_radius,
+                titlebar_location,
+            ) {
+                Ok(element) => push(TileRenderElement::TitleBar(element)),
+                Err(err) => warn!("error rendering window title bar: {err:?}"),
+            }
         }
 
         if fullscreen_progress > 0. {

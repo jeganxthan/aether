@@ -1,7 +1,9 @@
 [package]
 name = "aether-themes"
-version = "0.1.0"
-edition = "2024"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
 
 [dependencies]
 gpui-kit = "0.10.0"

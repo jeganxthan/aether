@@ -382,8 +382,8 @@ impl ResolvedWindowRules {
         (min_size, max_size)
     }
 
-    pub fn compute_open_floating(&self, _toplevel: &ToplevelSurface) -> bool {
-        self.open_floating.unwrap_or(true)
+    pub fn compute_open_floating(&self, _toplevel: &ToplevelSurface, default: bool) -> bool {
+        self.open_floating.unwrap_or(default)
     }
 }
 
