@@ -1,4 +1,4 @@
-use std::error::Error;
+use std::{error::Error, time::Duration};
 
 use crate::{
     components::sidebar::SettingsSidebar,
@@ -19,6 +19,12 @@ use gpui_kit::*;
 
 type ServiceResult<T> = Result<T, Box<dyn Error + Send + Sync>>;
 
+const SIDEBAR_BACKGROUND: u32 = 0x14161a;
+const SIDEBAR_FOREGROUND: u32 = 0xd9dce1;
+const SIDEBAR_ACCENT: u32 = 0x292c32;
+const SIDEBAR_ACCENT_FOREGROUND: u32 = 0xf1f2f4;
+const SIDEBAR_BORDER: u32 = 0x292c32;
+
 #[derive(Clone, Copy, PartialEq)]
 pub enum SettingsPage {
     Appearance,
@@ -30,6 +36,7 @@ pub enum SettingsPage {
 pub struct SettingsAppConfig {
     pub search_input: Entity<InputState>,
     pub wifi_search_input: Entity<InputState>,
+    pub wifi_password_input: Entity<InputState>,
     pub niri_blur: bool,
 }
 
@@ -43,6 +50,10 @@ pub struct WifiConfig {
     connected_networks: Option<ConnectedNetwork>,
     selected_network: Option<ConnectedNetwork>,
     show_password: bool,
+
+    selected_ssid: Option<String>,
+    connecting_ssid: Option<String>,
+    connection_error: Option<String>,
 
     networks_pending: bool,
     networks_error: Option<String>,
@@ -61,9 +72,7 @@ pub struct SettingsApp {
 
 impl SettingsApp {
     pub fn new(config: SettingsAppConfig, cx: &mut Context<Self>) -> Self {
-        if config.niri_blur {
-            set_translucent_sidebar(cx);
-        }
+        set_dark_sidebar_theme(cx, config.niri_blur);
 
         let theme = ThemeService::current_name(cx);
         let network_dialog = DialogHandle::new(false);
@@ -86,7 +95,7 @@ impl SettingsApp {
                         let networks = client.scan_and_list_networks().await?;
                         let connected = client.connected_wifi().await?.into_iter().next();
 
-                        Ok((networks, connected))
+                        Ok::<_, Box<dyn Error + Send + Sync>>((networks, connected))
                     }
                     .await
                 } else {
@@ -134,7 +143,6 @@ impl SettingsApp {
             }
         })
         .detach();
-
         Self {
             sidebar_collapsed: false,
             config,
@@ -150,6 +158,9 @@ impl SettingsApp {
                 connected_networks: None,
                 selected_network: None,
                 show_password: false,
+                selected_ssid: None,
+                connecting_ssid: None,
+                connection_error: None,
                 networks_pending: true,
                 networks_error: None,
                 wifi_toggle_generation: 0,
@@ -157,6 +168,116 @@ impl SettingsApp {
             network_dialog,
             _theme_subscription: theme_subscription,
         }
+    }
+
+    fn connect_to_wifi(&mut self, ssid: String, password: String, cx: &mut Context<Self>) {
+        if self.wifi.connecting_ssid.is_some() {
+            return;
+        }
+
+        let Some(client) = self.wifi.wifi_client.clone() else {
+            self.wifi.connection_error = Some("Wi-Fi service is unavailable".into());
+            cx.notify();
+            return;
+        };
+
+        self.wifi.connecting_ssid = Some(ssid.clone());
+        self.wifi.connection_error = None;
+        cx.notify();
+
+        cx.spawn(async move |this, cx| {
+            let connection_result = client.connect_network(&ssid, Some(&password), None).await;
+
+            let refresh_result = if connection_result.is_ok() {
+                futures_timer::Delay::new(Duration::from_secs(2)).await;
+
+                Some(
+                    async {
+                        let networks = client.scan_and_list_networks().await?;
+                        let connected = client.connected_wifi().await?.into_iter().next();
+
+                        Ok::<_, Box<dyn Error + Send + Sync>>((networks, connected))
+                    }
+                    .await,
+                )
+            } else {
+                None
+            };
+
+            let _ = this.update(cx, |this, cx| {
+                this.wifi.connecting_ssid = None;
+
+                match connection_result {
+                    Ok(()) => match refresh_result {
+                        Some(Ok((networks, connected))) => {
+                            this.wifi.wifi_networks = networks;
+                            this.wifi.connected_networks = connected;
+                            this.wifi.networks_error = None;
+                            this.wifi.connection_error = None;
+                            this.wifi.selected_ssid = None;
+                        }
+                        Some(Err(error)) => {
+                            this.wifi.connection_error = Some(format!(
+                                "Connected, but failed to refresh networks: {error}"
+                            ));
+                        }
+                        None => unreachable!(),
+                    },
+                    Err(error) => {
+                        this.wifi.connection_error = Some(error.to_string());
+                    }
+                }
+
+                cx.notify();
+            });
+        })
+        .detach();
+    }
+
+    fn refresh_wifi(&mut self, cx: &mut Context<Self>) {
+        if self.wifi.wifi_pending
+            || self.wifi.networks_pending
+            || self.wifi.wifi_enabled != Some(true)
+        {
+            return;
+        }
+
+        let Some(client) = self.wifi.wifi_client.clone() else {
+            return;
+        };
+
+        self.wifi.networks_pending = true;
+        self.wifi.networks_error = None;
+
+        cx.notify();
+
+        cx.spawn(async move |this, cx| {
+            let result = async {
+                let networks = client.scan_and_list_networks().await?;
+                let connected = client.connected_wifi().await?.into_iter().next();
+
+                Ok::<_, Box<dyn Error + Send + Sync>>((networks, connected))
+            }
+            .await;
+
+            let _ = this.update(cx, |this, cx| {
+                this.wifi.networks_pending = false;
+
+                match result {
+                    Ok((networks, connected)) => {
+                        this.wifi.wifi_networks = networks;
+                        this.wifi.connected_networks = connected;
+                        this.wifi.networks_error = None;
+                    }
+                    Err(error) => {
+                        this.wifi.networks_error = Some(error.to_string());
+                    }
+                }
+
+                cx.notify();
+            });
+        })
+        .detach();
     }
 }
 
@@ -167,7 +288,7 @@ impl Render for SettingsApp {
         let theme = self.theme.clone();
         let palette = ThemeService::palette(cx);
         let available_themes = ThemeService::available(cx);
-
+        let password_input = self.config.wifi_password_input.clone();
         let app = cx.entity();
 
         let toggle_app = app.clone();
@@ -175,14 +296,16 @@ impl Render for SettingsApp {
         let wifi_app = app.clone();
         let refresh_app = app.clone();
         let network_settings_app = app.clone();
+        let connect_app = app.clone();
+        let select_network_app = app.clone();
+        let cancel_network_app = app.clone();
+
         let content = match self.current_page {
             SettingsPage::Appearance => {
                 let translucent_sidebar = self.config.niri_blur;
                 pages::appearance::render(theme, available_themes, move |next, _, cx| {
                     ThemeService::apply_config(cx, next);
-                    if translucent_sidebar {
-                        set_translucent_sidebar(cx);
-                    }
+                    set_dark_sidebar_theme(cx, translucent_sidebar);
                 })
             }
 
@@ -196,6 +319,10 @@ impl Render for SettingsApp {
                 self.wifi.wifi_error.clone(),
                 self.wifi.wifi_networks.clone(),
                 self.wifi.connected_networks.clone(),
+                self.wifi.selected_ssid.clone(),
+                self.wifi.connecting_ssid.clone(),
+                self.wifi.connection_error.clone(),
+                password_input.clone(),
                 self.wifi.networks_pending,
                 self.wifi.networks_error.clone(),
                 // Wi-Fi enable / disable
@@ -364,6 +491,38 @@ impl Render for SettingsApp {
                         this.wifi.show_password = false;
                         this.network_dialog.open(window, cx);
                         cx.notify();
+                    });
+                },
+                // Select / expand a network
+                move |ssid, cx| {
+                    select_network_app.update(cx, |this, cx| {
+                        if this.wifi.connecting_ssid.is_some() {
+                            return;
+                        }
+
+                        if this.wifi.selected_ssid.as_deref() == Some(ssid.as_str()) {
+                            this.wifi.selected_ssid = None;
+                        } else {
+                            this.wifi.selected_ssid = Some(ssid);
+                        }
+
+                        this.wifi.connection_error = None;
+
+                        cx.notify();
+                    });
+                },
+                // Cancel connection
+                move |cx| {
+                    cancel_network_app.update(cx, |this, cx| {
+                        this.wifi.selected_ssid = None;
+                        this.wifi.connection_error = None;
+
+                        cx.notify();
+                    });
+                },
+                move |ssid, password, cx| {
+                    connect_app.update(cx, |this, cx| {
+                        this.connect_to_wifi(ssid, password, cx);
                     });
                 },
             ),
@@ -570,12 +729,17 @@ impl Render for SettingsApp {
             move |page, _, cx| {
                 navigate_app.update(cx, |this, cx| {
                     this.current_page = page;
+
+                    if page == SettingsPage::Wifi {
+                        this.refresh_wifi(cx);
+                    }
+
                     cx.notify();
                 });
             },
         );
 
-        let root = div().flex().size_full();
+        let root = div().flex().flex_col().size_full();
 
         let root = if niri_blur {
             root
@@ -583,23 +747,41 @@ impl Render for SettingsApp {
             root.bg(rgb(palette.background))
         };
 
-        root.child(sidebar)
-            .child(
-                div()
-                    .flex_1()
-                    .size_full()
-                    .bg(rgb(palette.content_background))
-                    .text_color(rgb(palette.foreground))
-                    .child(content),
-            )
-            .child(dialog)
+        root.child(
+            div()
+                .flex()
+                .flex_1()
+                .min_h_0()
+                .size_full()
+                .child(sidebar)
+                .child(
+                    div()
+                        .flex_1()
+                        .size_full()
+                        .bg(rgb(palette.content_background))
+                        .text_color(rgb(palette.foreground))
+                        .child(content),
+                )
+                .child(dialog),
+        )
     }
 }
 
-fn set_translucent_sidebar(cx: &mut App) {
-    let palette = ThemeService::palette(cx);
+fn set_dark_sidebar_theme(cx: &mut App, translucent: bool) {
+    let background = if translucent {
+        rgba(0x14161a26)
+    } else {
+        rgb(SIDEBAR_BACKGROUND)
+    };
+
     Theme::update(cx, |theme| {
-        theme.tokens.sidebar = Hsla::from(rgba(palette.sidebar_blur_background)).into();
+        theme.colors.sidebar = rgb(SIDEBAR_BACKGROUND).into();
+        theme.colors.sidebar_foreground = rgb(SIDEBAR_FOREGROUND).into();
+        theme.colors.sidebar_accent = rgb(SIDEBAR_ACCENT).into();
+        theme.colors.sidebar_accent_foreground = rgb(SIDEBAR_ACCENT_FOREGROUND).into();
+        theme.colors.sidebar_border = rgb(SIDEBAR_BORDER).into();
+        theme.tokens.sidebar = Hsla::from(background).into();
+        theme.tokens.sidebar_accent = Hsla::from(rgb(SIDEBAR_ACCENT)).into();
     });
 }
 

@@ -27,6 +27,7 @@ fn main() {
                     } else {
                         WindowBackgroundAppearance::Opaque
                     },
+                    window_decorations: Some(WindowDecorations::Server),
                     ..Default::default()
                 },
                 |window, cx| {
@@ -34,13 +35,17 @@ fn main() {
                         cx.new(|cx| InputState::new(window, cx).placeholder("Search settings"));
 
                     let wifi_search_input =
-                        cx.new(|cx| InputState::new(window, cx).placeholder("Search networks..."));
+                    cx.new(|cx| InputState::new(window, cx).placeholder("Search networks..."));
+                    
+                    let wifi_password_input =  
+                                        cx.new(|cx| InputState::new(window, cx).placeholder("Search networks..."));
 
                     let view = cx.new(|cx| {
                         app::SettingsApp::new(
                             app::SettingsAppConfig {
                                 search_input,
                                 wifi_search_input,
+                                wifi_password_input,
                                 niri_blur,
                             },
                             cx,

@@ -54,6 +54,9 @@ pub struct Workspace<W: LayoutElement> {
     /// Whether the floating layout is active instead of the scrolling layout.
     floating_is_active: FloatingActive,
 
+    /// Default floating state for newly opened windows when not overridden by a window rule.
+    default_open_floating: bool,
+
     /// The original outputs of this workspace, in preference order.
     ///
     /// Most of the time this will be the workspace's current output, however, after an output
@@ -262,6 +265,7 @@ impl<W: LayoutElement> Workspace<W> {
             scrolling,
             floating,
             floating_is_active: FloatingActive::No,
+            default_open_floating: true,
             original_outputs,
             scale,
             transform: output.current_transform(),
@@ -324,6 +328,7 @@ impl<W: LayoutElement> Workspace<W> {
             scrolling,
             floating,
             floating_is_active: FloatingActive::No,
+            default_open_floating: true,
             output: None,
             scale,
             transform: Transform::Normal,
@@ -347,6 +352,14 @@ impl<W: LayoutElement> Workspace<W> {
 
     pub fn id(&self) -> WorkspaceId {
         self.id
+    }
+
+    pub fn default_open_floating(&self) -> bool {
+        self.default_open_floating
+    }
+
+    pub fn set_default_open_floating(&mut self, floating: bool) {
+        self.default_open_floating = floating;
     }
 
     pub fn name(&self) -> Option<&String> {
@@ -1720,6 +1733,15 @@ impl<W: LayoutElement> Workspace<W> {
     }
 
     pub fn is_floating_visible(&self) -> bool {
+        if !self.floating_is_active.get()
+            && self
+                .scrolling
+                .active_column()
+                .is_some_and(|column| column.is_pending_maximized())
+        {
+            return false;
+        }
+
         // If the focus is on a fullscreen scrolling window, hide the floating windows.
         matches!(
             self.floating_is_active,

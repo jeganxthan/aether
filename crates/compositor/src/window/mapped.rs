@@ -949,6 +949,10 @@ impl LayoutElement for Mapped {
         }
     }
 
+    fn title(&self) -> Option<String> {
+        with_toplevel_role(self.toplevel(), |role| role.title.clone())
+    }
+
     fn output_enter(&self, output: &Output) {
         let overlap = Rectangle::from_size(Size::from((i32::MAX, i32::MAX)));
         self.window.output_enter(output, overlap)

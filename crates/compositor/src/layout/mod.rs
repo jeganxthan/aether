@@ -85,6 +85,7 @@ pub mod scrolling;
 pub mod shadow;
 pub mod tab_indicator;
 pub mod tile;
+pub mod titlebar;
 pub mod workspace;
 
 #[cfg(test)]
@@ -234,6 +235,9 @@ pub trait LayoutElement {
     fn max_size(&self) -> Size<i32, Logical>;
     fn is_wl_surface(&self, wl_surface: &WlSurface) -> bool;
     fn has_ssd(&self) -> bool;
+    fn title(&self) -> Option<String> {
+        None
+    }
     fn set_preferred_scale_transform(&self, scale: output::Scale, transform: Transform);
     fn output_enter(&self, output: &Output);
     fn output_leave(&self, output: &Output);
@@ -547,6 +551,11 @@ pub enum HitType {
         /// Whether the hit was on the tab indicator.
         is_tab_indicator: bool,
     },
+    /// Hit on compositor window controls or the title bar.
+    TitleBar {
+        /// Position relative to the controls and title bar.
+        point_in_controls: Point<f64, Logical>,
+    },
 }
 
 #[derive(Debug)]
@@ -636,7 +645,7 @@ impl HitType {
     pub fn offset_win_pos(mut self, offset: Point<f64, Logical>) -> Self {
         match &mut self {
             HitType::Input { win_pos } => *win_pos += offset,
-            HitType::Activate { .. } => (),
+            HitType::Activate { .. } | HitType::TitleBar { .. } => (),
         }
         self
     }
@@ -657,6 +666,9 @@ impl HitType {
                 is_tab_indicator: false,
             },
             HitType::Activate { .. } => self,
+            HitType::TitleBar { .. } => HitType::Activate {
+                is_tab_indicator: false,
+            },
         }
     }
 }
@@ -963,6 +975,48 @@ impl<W: LayoutElement> Layout<W> {
 
         if activate {
             *active_monitor_idx = monitor_idx;
+        }
+    }
+
+    pub fn default_open_floating_for_target(&self, target: &AddWindowTarget<'_, W>) -> bool {
+        match &self.monitor_set {
+            MonitorSet::Normal {
+                monitors,
+                active_monitor_idx,
+                ..
+            } => match target {
+                AddWindowTarget::Auto => monitors[*active_monitor_idx]
+                    .active_workspace_ref()
+                    .default_open_floating(),
+                AddWindowTarget::Output(output) => monitors
+                    .iter()
+                    .find(|mon| mon.output == **output)
+                    .map_or(true, |mon| mon.active_workspace_ref().default_open_floating()),
+                AddWindowTarget::Workspace(ws_id) => monitors
+                    .iter()
+                    .flat_map(|mon| &mon.workspaces)
+                    .find(|ws| ws.id() == *ws_id)
+                    .map_or(true, |ws| ws.default_open_floating()),
+                AddWindowTarget::NextTo(next_to) => monitors
+                    .iter()
+                    .flat_map(|mon| &mon.workspaces)
+                    .find(|ws| ws.has_window(*next_to))
+                    .map_or(true, |ws| ws.default_open_floating()),
+            },
+            MonitorSet::NoOutputs { workspaces } => match target {
+                AddWindowTarget::Auto => workspaces
+                    .first()
+                    .map_or(true, |ws| ws.default_open_floating()),
+                AddWindowTarget::Output(_) => true,
+                AddWindowTarget::Workspace(ws_id) => workspaces
+                    .iter()
+                    .find(|ws| ws.id() == *ws_id)
+                    .map_or(true, |ws| ws.default_open_floating()),
+                AddWindowTarget::NextTo(next_to) => workspaces
+                    .iter()
+                    .find(|ws| ws.has_window(*next_to))
+                    .map_or(true, |ws| ws.default_open_floating()),
+            },
         }
     }
 
@@ -3243,19 +3297,21 @@ impl<W: LayoutElement> Layout<W> {
             return;
         }
 
-        let Some(workspace) = self.active_workspace() else {
+        let Some(workspace) = self.active_workspace_mut() else {
             return;
         };
         let windows: Vec<_> = workspace
             .windows()
             .map(|window| window.id().clone())
             .collect();
-        if windows.is_empty() {
-            return;
-        }
+        let should_float = if windows.is_empty() {
+            !workspace.default_open_floating()
+        } else {
+            let all_floating = windows.iter().all(|window| workspace.is_floating(window));
+            !all_floating
+        };
+        workspace.set_default_open_floating(should_float);
 
-        let all_floating = windows.iter().all(|window| workspace.is_floating(window));
-        let should_float = !all_floating;
         for window in windows {
             self.set_window_floating(Some(&window), should_float);
         }

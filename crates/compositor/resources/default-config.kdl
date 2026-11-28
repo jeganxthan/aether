@@ -275,16 +275,16 @@ spawn-at-startup "waybar"
 // spawn-sh-at-startup "qs -c ~/source/qs/MyAwesomeShell"
 
 hotkey-overlay {
-    // Uncomment this line to disable the "Important Hotkeys" pop-up at startup.
-    // skip-at-startup
+    // The hotkey help remains available through its keybinding.
+    skip-at-startup
 }
 
-// Uncomment this line to ask the clients to omit their client-side decorations if possible.
+// Ask clients to omit their client-side decorations if possible.
 // If the client will specifically ask for CSD, the request will be honored.
 // Additionally, clients will be informed that they are tiled, removing some client-side rounded corners.
 // This option will also fix border/focus ring drawing behind some semitransparent windows.
 // After enabling or disabling this, you need to restart the apps for this to take effect.
-// prefer-no-csd
+prefer-no-csd
 
 // You can change the path where screenshots are saved.
 // A ~ at the front will be expanded to the home directory.
@@ -358,9 +358,8 @@ window-rule {
     // block-out-from "screencast"
 }
 
-// Example: enable rounded corners for all windows.
-// (This example rule is commented out with a "/-" in front.)
-/-window-rule {
+// Round normal-sized windows and clip their contents to match.
+window-rule {
     geometry-corner-radius 12
     clip-to-geometry true
 }
@@ -600,8 +599,8 @@ binds {
     Mod+Shift+F { toggle-window-floating; }
     Mod+Ctrl+Shift+F { fullscreen-window; }
 
-    // Fullscreen the focused window above other windows.
-    Mod+M { fullscreen-window; }
+    // Maximize or restore the focused window.
+    Mod+M { maximize-window-to-edges; }
 
     // Expand the focused column to space not taken up by other fully visible columns.
     // Makes the column "fill the rest of the space".
@@ -627,9 +626,10 @@ binds {
     Mod+Shift+Minus { set-window-height "-10%"; }
     Mod+Shift+Equal { set-window-height "+10%"; }
 
-    // Toggle all windows on the active workspace between floating and tiling.
+    // Toggle all windows on the active workspace between floating and tiling,
+    // or move only the focused window between floating and tiling.
     Mod+V       { toggle-all-windows-floating; }
-    Mod+Shift+V { switch-focus-between-floating-and-tiling; }
+    Mod+Shift+V { toggle-window-floating; }
 
     // Toggle tabbed column display mode.
     // Windows in this column will appear as vertical tabs,

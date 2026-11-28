@@ -146,8 +146,7 @@ impl CompositorHandler for State {
 
                     // The GTK about dialog sets min/max size after the initial configure but
                     // before mapping, so we need to compute open_floating at the last possible
-                    // moment, that is here.
-                    let is_floating = rules.compute_open_floating(toplevel);
+                    // moment, that is below once the target workspace is known.
 
                     // Figure out if we should activate the window.
                     let activate = rules.open_focused.map(|focus| {
@@ -210,6 +209,13 @@ impl CompositorHandler for State {
                     } else {
                         AddWindowTarget::Auto
                     };
+                    let default_floating = self
+                        .aether
+                        .layout
+                        .default_open_floating_for_target(&target);
+                    let is_floating = mapped
+                        .rules()
+                        .compute_open_floating(window.toplevel().expect("no X11 support"), default_floating);
                     let output = self.aether.layout.add_window(
                         mapped,
                         target,

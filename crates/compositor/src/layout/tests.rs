@@ -3331,12 +3331,14 @@ fn toggle_all_windows_floating_switches_workspace_as_a_group() {
     assert!(workspace
         .windows()
         .all(|window| !workspace.is_floating(window.id())));
+    assert!(!layout.default_open_floating_for_target(&AddWindowTarget::Auto));
 
     layout.toggle_all_windows_floating();
     let workspace = layout.active_workspace().unwrap();
     assert!(workspace
         .windows()
         .all(|window| workspace.is_floating(window.id())));
+    assert!(layout.default_open_floating_for_target(&AddWindowTarget::Auto));
 }
 
 #[test]
@@ -3702,6 +3704,35 @@ fn restore_to_floating_persists_across_fullscreen_maximize() {
     // Unmaximize should return the window back to floating.
     let scrolling = layout.active_workspace().unwrap().scrolling();
     assert!(scrolling.tiles().next().is_none());
+}
+
+#[test]
+fn maximized_window_is_not_obscured_by_floating_windows() {
+    let ops = [
+        Op::AddOutput(1),
+        Op::AddWindow {
+            params: TestWindowParams::new(1),
+        },
+        Op::AddWindow {
+            params: TestWindowParams::new(2),
+        },
+        Op::ToggleWindowFloating { id: Some(2) },
+        Op::FocusWindow(1),
+        Op::MaximizeWindowToEdges { id: Some(1) },
+    ];
+
+    let mut layout = check_ops(ops);
+    let workspace = layout.active_workspace().unwrap();
+
+    assert!(workspace
+        .scrolling()
+        .active_column()
+        .unwrap()
+        .is_pending_maximized());
+    assert!(!workspace.is_floating_visible());
+
+    check_ops_on_layout(&mut layout, [Op::MaximizeWindowToEdges { id: Some(1) }]);
+    assert!(layout.active_workspace().unwrap().is_floating_visible());
 }
 
 #[test]

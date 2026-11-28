@@ -37,10 +37,7 @@ impl SearchInput {
                 rgba(palette.sidebar_blur_background),
             )
         } else {
-            (
-                rgb(palette.input_border),
-                rgb(palette.input_background),
-            )
+            (rgb(palette.input_border), rgb(palette.input_background))
         };
 
         let mut container = div()
@@ -48,12 +45,7 @@ impl SearchInput {
             .rounded_md()
             .border_1()
             .border_color(border)
-            .bg(bg)
-            .hover(move |style| {
-                style
-                    .border_color(rgb(palette.accent))
-                    .bg(bg)
-            });
+            .bg(bg);
 
         if let Some(width) = width {
             container = container.w(px(width));
